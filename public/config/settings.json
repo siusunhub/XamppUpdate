@@ -1,0 +1,34 @@
+{
+  "General": {
+    "BackupDirectory": "backup",
+    "TempDirectory": "temp",
+    "MaxBackupRetentionCount": 10,
+    "AutoCheckUpdatesOnStartup": false
+  },
+  "Apache": {
+    "InstallationPath": "C:\\xampp\\apache",
+    "ServiceName": "apache2.4",
+    "ConfigFiles": [
+      "conf/httpd.conf",
+      "conf/extra/httpd-ssl.conf",
+      "conf/extra/httpd-xampp.conf"
+    ]
+  },
+  "Php": {
+    "InstallationPath": "C:\\xampp\\php",
+    "IniPath": "C:\\xampp\\php\\php.ini"
+  },
+  "MySql": {
+    "InstallationPath": "C:\\xampp\\mysql",
+    "ServiceName": "mysql",
+    "IniPath": "C:\\xampp\\mysql\\bin\\my.ini"
+  },
+  "Composer": {
+    "ExecutablePath": "C:\\ProgramData\\ComposerSetup\\bin\\composer.bat",
+    "WebTargetPath": "C:\\xampp\\php\\composer"
+  },
+  "Ssl": {
+    "CertificatesPath": "C:\\xampp\\apache\\conf\\ssl.crt",
+    "KeysPath": "C:\\xampp\\apache\\conf\\ssl.key"
+  }
+}

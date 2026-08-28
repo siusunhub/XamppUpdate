@@ -1,0 +1,115 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "XamppUpdate/1.0.0": {
+        "dependencies": {
+          "CommunityToolkit.Mvvm": "8.4.0",
+          "DiffPlex": "1.7.2",
+          "SharpCompress": "0.39.0",
+          "System.ServiceProcess.ServiceController": "9.0.0"
+        },
+        "runtime": {
+          "XamppUpdate.dll": {}
+        }
+      },
+      "CommunityToolkit.Mvvm/8.4.0": {
+        "runtime": {
+          "lib/net8.0/CommunityToolkit.Mvvm.dll": {
+            "assemblyVersion": "8.4.0.0",
+            "fileVersion": "8.4.0.1"
+          }
+        }
+      },
+      "DiffPlex/1.7.2": {
+        "runtime": {
+          "lib/net6.0/DiffPlex.dll": {
+            "assemblyVersion": "1.7.2.0",
+            "fileVersion": "1.7.2.0"
+          }
+        }
+      },
+      "SharpCompress/0.39.0": {
+        "dependencies": {
+          "ZstdSharp.Port": "0.8.4"
+        },
+        "runtime": {
+          "lib/net8.0/SharpCompress.dll": {
+            "assemblyVersion": "0.39.0.0",
+            "fileVersion": "0.39.0.0"
+          }
+        }
+      },
+      "System.ServiceProcess.ServiceController/9.0.0": {
+        "runtime": {
+          "lib/net9.0/System.ServiceProcess.ServiceController.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net9.0/System.ServiceProcess.ServiceController.dll": {
+            "rid": "win",
+            "assetType": "runtime",
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        }
+      },
+      "ZstdSharp.Port/0.8.4": {
+        "runtime": {
+          "lib/net9.0/ZstdSharp.dll": {
+            "assemblyVersion": "0.8.4.0",
+            "fileVersion": "0.8.4.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "XamppUpdate/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "CommunityToolkit.Mvvm/8.4.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-tqVU8yc/ADO9oiTRyTnwhFN68hCwvkliMierptWOudIAvWY1mWCh5VFh+guwHJmpMwfg0J0rY+yyd5Oy7ty9Uw==",
+      "path": "communitytoolkit.mvvm/8.4.0",
+      "hashPath": "communitytoolkit.mvvm.8.4.0.nupkg.sha512"
+    },
+    "DiffPlex/1.7.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-qJEjdxEDBWSFZGB8paBB9HDeJXHGlHlOXeGX3kbTuXWuOsgv2iSAEOOzo5V1/B39Vcxr9IVVrNKewRcX+rsn4g==",
+      "path": "diffplex/1.7.2",
+      "hashPath": "diffplex.1.7.2.nupkg.sha512"
+    },
+    "SharpCompress/0.39.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-0esqIUDlg68Z7+Weuge4QzEvNtawUO4obTJFL7xuf4DBHMxVRr+wbNgiX9arMrj3kGXQSvLe0zbZG3oxpkwJOA==",
+      "path": "sharpcompress/0.39.0",
+      "hashPath": "sharpcompress.0.39.0.nupkg.sha512"
+    },
+    "System.ServiceProcess.ServiceController/9.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ciFstNZEWYf40HbwzdQLdgQpgpnjkleC1z0jMqBKRdkEQqQ6I/Aht0x9fTBODnaQTtcF+scvrdimoDbfNap/aQ==",
+      "path": "system.serviceprocess.servicecontroller/9.0.0",
+      "hashPath": "system.serviceprocess.servicecontroller.9.0.0.nupkg.sha512"
+    },
+    "ZstdSharp.Port/0.8.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-eieSXq3kakCUXbgdxkKaRqWS6hF0KBJcqok9LlDCs60GOyrynLvPOcQ0pRw7shdPF7lh/VepJ9cP9n9HHc759g==",
+      "path": "zstdsharp.port/0.8.4",
+      "hashPath": "zstdsharp.port.0.8.4.nupkg.sha512"
+    }
+  }
+}

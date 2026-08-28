@@ -1,0 +1,26 @@
+## Visual Studio & .NET
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Build Outputs
+# Ignore intermediate build files, but allow tracking release packaging templates if needed
+*.nupkg
+*.snupkg
+
+## App Working Directories (Runtime)
+temp/
+backup/
+config/settings.user.json
+
+## OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

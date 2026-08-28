@@ -1,0 +1,143 @@
+<UserControl x:Class="XamppUpdate.Views.Controls.SideBySideDiffViewer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:conv="clr-namespace:XamppUpdate.Converters"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <conv:DiffTypeToBrushConverter x:Key="DiffBgConverter" TargetProperty="Background" />
+        <conv:DiffTypeToBrushConverter x:Key="DiffFgConverter" TargetProperty="Foreground" />
+        <conv:DiffTypeToBrushConverter x:Key="DiffLineNoConverter" TargetProperty="LineNumberFg" />
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisConverter" />
+    </UserControl.Resources>
+
+    <Grid Background="#FFFFFF">
+        <Grid.RowDefinitions>
+            <!-- Header -->
+            <RowDefinition Height="Auto" />
+            <!-- Diff Viewport -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Column Headers -->
+        <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="1" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Column Header -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Current Local Config" FontWeight="Bold" FontSize="12.5" Foreground="#0F172A" />
+                    <Border Background="#FEE2E2" CornerRadius="4" Padding="6,1" Margin="10,0,0,0"
+                            Visibility="{Binding DiffItem.DeletionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="{Binding DiffItem.DeletionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='-{0} removed'}"
+                                   Foreground="#B91C1C" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                </StackPanel>
+
+                <!-- Center Divider -->
+                <Rectangle Grid.Column="1" Fill="#CBD5E1" />
+
+                <!-- Right Column Header -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Incoming New Config" FontWeight="Bold" FontSize="12.5" Foreground="#0F172A" />
+                    <Border Background="#DCFCE7" CornerRadius="4" Padding="6,1" Margin="10,0,0,0"
+                            Visibility="{Binding DiffItem.AdditionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="{Binding DiffItem.AdditionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='+{0} added'}"
+                                   Foreground="#15803D" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                    <Border Background="#FEF3C7" CornerRadius="4" Padding="6,1" Margin="6,0,0,0"
+                            Visibility="{Binding DiffItem.ModificationsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="{Binding DiffItem.ModificationsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='~{0} modified'}"
+                                   Foreground="#B45309" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Side-by-Side Content with synchronized scrolling -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left Local Pane -->
+            <ScrollViewer Grid.Column="0" x:Name="LeftScrollViewer"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Hidden"
+                          ScrollChanged="LeftScrollViewer_ScrollChanged">
+                <ItemsControl ItemsSource="{Binding DiffItem.LocalLines, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Background="{Binding Type, Converter={StaticResource DiffBgConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="42" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <!-- Line Number -->
+                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,6,2">
+                                    <TextBlock Text="{Binding DisplayLineNumber}"
+                                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                                               FontSize="11.5"
+                                               Foreground="{Binding Type, Converter={StaticResource DiffLineNoConverter}}"
+                                               HorizontalAlignment="Right" />
+                                </Border>
+                                <!-- Line Text -->
+                                <TextBlock Grid.Column="1" Text="{Binding Text}"
+                                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                                           FontSize="12"
+                                           Foreground="{Binding Type, Converter={StaticResource DiffFgConverter}}"
+                                           Padding="6,2"
+                                           TextWrapping="NoWrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Center Divider -->
+            <Rectangle Grid.Column="1" Fill="#E2E8F0" />
+
+            <!-- Right Incoming Pane -->
+            <ScrollViewer Grid.Column="2" x:Name="RightScrollViewer"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          ScrollChanged="RightScrollViewer_ScrollChanged">
+                <ItemsControl ItemsSource="{Binding DiffItem.IncomingLines, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Background="{Binding Type, Converter={StaticResource DiffBgConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="42" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <!-- Line Number -->
+                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,6,2">
+                                    <TextBlock Text="{Binding DisplayLineNumber}"
+                                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                                               FontSize="11.5"
+                                               Foreground="{Binding Type, Converter={StaticResource DiffLineNoConverter}}"
+                                               HorizontalAlignment="Right" />
+                                </Border>
+                                <!-- Line Text -->
+                                <TextBlock Grid.Column="1" Text="{Binding Text}"
+                                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                                           FontSize="12"
+                                           Foreground="{Binding Type, Converter={StaticResource DiffFgConverter}}"
+                                           Padding="6,2"
+                                           TextWrapping="NoWrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>
