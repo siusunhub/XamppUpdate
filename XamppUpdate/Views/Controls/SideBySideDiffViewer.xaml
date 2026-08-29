@@ -124,16 +124,17 @@
             </Grid.RowDefinitions>
 
             <!-- Column Headers -->
-            <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="12,6">
+            <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="0,6">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="1" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="{x:Static SystemParameters.VerticalScrollBarWidth}" />
                     </Grid.ColumnDefinitions>
 
                     <!-- Left Column Header -->
-                    <DockPanel Grid.Column="0">
+                    <DockPanel Grid.Column="0" Margin="12,0,12,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="Current Local Config (Working)" FontWeight="Bold" FontSize="12" Foreground="#0F172A" />
                             <Border Background="#FEE2E2" CornerRadius="4" Padding="6,1" Margin="8,0,0,0"
@@ -148,7 +149,7 @@
                     <Rectangle Grid.Column="1" Fill="#CBD5E1" />
 
                     <!-- Right Column Header -->
-                    <DockPanel Grid.Column="2" Margin="12,0,0,0">
+                    <DockPanel Grid.Column="2" Margin="12,0,12,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="Incoming New Config" FontWeight="Bold" FontSize="12" Foreground="#0F172A" />
                             <Border Background="#DCFCE7" CornerRadius="4" Padding="6,1" Margin="8,0,0,0"
@@ -170,8 +171,8 @@
                      VirtualizingStackPanel.IsVirtualizing="True"
                      VirtualizingStackPanel.VirtualizationMode="Recycling"
                      ScrollViewer.CanContentScroll="True"
-                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Visible"
                      Background="White"
                      BorderThickness="0"
                      Padding="0"
@@ -220,6 +221,7 @@
                                 <!-- Copyable Line Text -->
                                 <TextBox Grid.Column="1"
                                          Text="{Binding Local.Text, Mode=OneWay}"
+                                         ToolTip="{Binding Local.Text}"
                                          FontFamily="Consolas, Cascadia Code, Courier New"
                                          FontSize="12"
                                          Foreground="{Binding Local.Type, Converter={StaticResource DiffFgConverter}}"
@@ -241,7 +243,6 @@
                                     <ColumnDefinition Width="38" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <!-- Line Number -->
                                 <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,4,2">
@@ -264,6 +265,7 @@
                                 <!-- Copyable Line Text -->
                                 <TextBox Grid.Column="2"
                                          Text="{Binding Incoming.Text, Mode=OneWay}"
+                                         ToolTip="{Binding Incoming.Text}"
                                          FontFamily="Consolas, Cascadia Code, Courier New"
                                          FontSize="12"
                                          Foreground="{Binding Incoming.Type, Converter={StaticResource DiffFgConverter}}"
@@ -274,18 +276,6 @@
                                          Padding="4,2"
                                          VerticalAlignment="Center"
                                          SelectionBrush="#0284C7" />
-                                <!-- Quick Copy Button -->
-                                <Button Grid.Column="3"
-                                        Content="📋"
-                                        Click="BtnCopyIncomingLine_Click"
-                                        ToolTip="Copy incoming line"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Cursor="Hand"
-                                        FontSize="10"
-                                        Padding="4,2"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding Incoming.HasText, Converter={StaticResource BoolToVisConverter}}" />
                             </Grid>
                         </Grid>
                     </DataTemplate>
