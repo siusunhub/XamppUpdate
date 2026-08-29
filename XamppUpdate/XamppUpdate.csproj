@@ -18,7 +18,7 @@
 
   <!-- Route Release build directly to public directory at project root -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <OutputPath>..\..\public\</OutputPath>
+    <OutputPath>..\public\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
