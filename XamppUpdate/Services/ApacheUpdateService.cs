@@ -121,7 +121,7 @@ namespace XamppUpdate.Services
                 Step = UpdateStep.DownloadAndExtract,
                 StepTitle = "Preparation Complete",
                 Message = $"Ready. Apache root detected at: {Path.GetFileName(realApacheRoot)}",
-                Percentage = 60
+                Percentage = 100
             });
 
             return realApacheRoot;

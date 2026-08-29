@@ -175,6 +175,8 @@ namespace XamppUpdate.ViewModels
 
                 // Proceed to Step 2
                 CurrentStepIndex = 1;
+                ProgressPercentage = 0;
+                IsIndeterminateProgress = false;
                 StatusMessage = "Configuration comparison ready.";
             }
             catch (Exception ex)
@@ -193,6 +195,8 @@ namespace XamppUpdate.ViewModels
         public void GoBackToStep1()
         {
             CurrentStepIndex = 0;
+            ProgressPercentage = 0;
+            IsIndeterminateProgress = false;
             ErrorMessage = string.Empty;
         }
 
@@ -203,6 +207,8 @@ namespace XamppUpdate.ViewModels
             ErrorMessage = string.Empty;
             IsCompleted = false;
             IsTestCompleted = false;
+            ProgressPercentage = 0;
+            IsIndeterminateProgress = false;
             StatusMessage = "Ready to apply update.";
         }
 
@@ -211,6 +217,8 @@ namespace XamppUpdate.ViewModels
         {
             if (IsExecuting || (IsCompleted && !IsTestCompleted)) return;
             CurrentStepIndex = 1;
+            ProgressPercentage = 0;
+            IsIndeterminateProgress = false;
             ErrorMessage = string.Empty;
         }
 
