@@ -54,6 +54,9 @@ namespace XamppUpdate.Models
         [ObservableProperty]
         private List<DiffLineModel> _incomingLines = new();
 
+        [ObservableProperty]
+        private List<DiffRowModel> _diffRows = new();
+
         public string SummaryText => IsCustomMerged
             ? "Custom Merged / Edited"
             : (HasDifferences

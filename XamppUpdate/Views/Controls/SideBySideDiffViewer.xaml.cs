@@ -11,7 +11,6 @@ namespace XamppUpdate.Views.Controls
 {
     public partial class SideBySideDiffViewer : UserControl
     {
-        private bool _isSyncingScroll;
         private readonly IConfigDiffService _diffService = new ConfigDiffService();
         private readonly DispatcherTimer _noticeTimer;
 
@@ -78,30 +77,6 @@ namespace XamppUpdate.Views.Controls
             }
         }
 
-        private void LeftScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
-        {
-            if (_isSyncingScroll) return;
-
-            if (e.VerticalChange != 0)
-            {
-                _isSyncingScroll = true;
-                RightScrollViewer.ScrollToVerticalOffset(e.VerticalOffset);
-                _isSyncingScroll = false;
-            }
-        }
-
-        private void RightScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
-        {
-            if (_isSyncingScroll) return;
-
-            if (e.VerticalChange != 0)
-            {
-                _isSyncingScroll = true;
-                LeftScrollViewer.ScrollToVerticalOffset(e.VerticalOffset);
-                _isSyncingScroll = false;
-            }
-        }
-
         private void BtnCopyAllLocal_Click(object sender, RoutedEventArgs e)
         {
             if (DiffItem == null) return;
@@ -118,28 +93,36 @@ namespace XamppUpdate.Views.Controls
             CopyToClipboard(DiffItem.IncomingContent, "✓ Copied incoming config to clipboard");
         }
 
-        private void BtnCopyLine_Click(object sender, RoutedEventArgs e)
+        private void BtnCopyLocalLine_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is DiffLineModel line && !string.IsNullOrEmpty(line.Text))
+            if (sender is Button btn && btn.DataContext is DiffRowModel row && !string.IsNullOrEmpty(row.Local.Text))
             {
-                CopyToClipboard(line.Text, "✓ Copied line to clipboard");
+                CopyToClipboard(row.Local.Text, "✓ Copied local line to clipboard");
+            }
+        }
+
+        private void BtnCopyIncomingLine_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is DiffRowModel row && !string.IsNullOrEmpty(row.Incoming.Text))
+            {
+                CopyToClipboard(row.Incoming.Text, "✓ Copied incoming line to clipboard");
             }
         }
 
         private void BtnInsertLine_Click(object sender, RoutedEventArgs e)
         {
             if (DiffItem == null) return;
-            if (sender is not Button btn || btn.DataContext is not DiffLineModel incomingLine) return;
+            if (sender is not Button btn || btn.DataContext is not DiffRowModel row) return;
 
-            int index = DiffItem.IncomingLines.IndexOf(incomingLine);
-            if (index < 0) return;
+            var incomingLine = row.Incoming;
+            int index = row.Index;
 
             var localLines = new List<string>(NormalizeLines(DiffItem.MergedContent));
 
             // Check if there is a corresponding local line
-            DiffLineModel? localCorresponding = index < DiffItem.LocalLines.Count ? DiffItem.LocalLines[index] : null;
+            DiffLineModel localCorresponding = row.Local;
 
-            if (localCorresponding != null && localCorresponding.LineNumber.HasValue && localCorresponding.LineNumber.Value > 0)
+            if (localCorresponding.LineNumber.HasValue && localCorresponding.LineNumber.Value > 0)
             {
                 int targetLineIndex = localCorresponding.LineNumber.Value - 1;
                 if (targetLineIndex >= 0 && targetLineIndex < localLines.Count)
@@ -154,13 +137,13 @@ namespace XamppUpdate.Views.Controls
             }
             else
             {
-                // Find nearest previous line in local diff that has a line number
+                // Find nearest previous line in DiffRows that has a local line number
                 int insertPos = 0;
                 for (int i = index - 1; i >= 0; i--)
                 {
-                    if (i < DiffItem.LocalLines.Count && DiffItem.LocalLines[i].LineNumber.HasValue)
+                    if (i < DiffItem.DiffRows.Count && DiffItem.DiffRows[i].Local.LineNumber.HasValue)
                     {
-                        insertPos = DiffItem.LocalLines[i].LineNumber!.Value;
+                        insertPos = DiffItem.DiffRows[i].Local.LineNumber!.Value;
                         break;
                     }
                 }

@@ -165,129 +165,145 @@
                     </DockPanel>
                 </Grid>
             </Border>
+            <ListBox Grid.Row="1"
+                     ItemsSource="{Binding DiffItem.DiffRows, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                     ScrollViewer.CanContentScroll="True"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     Background="White"
+                     BorderThickness="0"
+                     Padding="0"
+                     HorizontalContentAlignment="Stretch">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <ContentPresenter HorizontalAlignment="Stretch" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid HorizontalAlignment="Stretch" MinHeight="24">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="1" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-            <!-- Side-by-Side Content with synchronized scrolling -->
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="1" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
+                            <!-- ================= LEFT: LOCAL LINE ================= -->
+                            <Grid Grid.Column="0" Background="{Binding Local.Type, Converter={StaticResource DiffBgConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="38" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <!-- Line Number -->
+                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,4,2">
+                                    <TextBlock Text="{Binding Local.DisplayLineNumber}"
+                                               FontFamily="Consolas, Cascadia Code, Courier New"
+                                               FontSize="11.5"
+                                               Foreground="{Binding Local.Type, Converter={StaticResource DiffLineNoConverter}}"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                                <!-- Copyable Line Text -->
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding Local.Text, Mode=OneWay}"
+                                         FontFamily="Consolas, Cascadia Code, Courier New"
+                                         FontSize="12"
+                                         Foreground="{Binding Local.Type, Converter={StaticResource DiffFgConverter}}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         IsReadOnly="True"
+                                         TextWrapping="NoWrap"
+                                         Padding="4,2"
+                                         VerticalAlignment="Center"
+                                         SelectionBrush="#0284C7" />
+                                <!-- Quick Copy Button -->
+                                <Button Grid.Column="2"
+                                        Content="📋"
+                                        Click="BtnCopyLocalLine_Click"
+                                        ToolTip="Copy local line"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        FontSize="10"
+                                        Padding="4,2"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding Local.HasText, Converter={StaticResource BoolToVisConverter}}" />
+                            </Grid>
 
-                <!-- Left Local Pane -->
-                <ScrollViewer Grid.Column="0" x:Name="LeftScrollViewer"
-                              HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Hidden"
-                              ScrollChanged="LeftScrollViewer_ScrollChanged">
-                    <ItemsControl ItemsSource="{Binding DiffItem.LocalLines, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Background="{Binding Type, Converter={StaticResource DiffBgConverter}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="38" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <!-- Line Number -->
-                                    <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,4,2">
-                                        <TextBlock Text="{Binding DisplayLineNumber}"
-                                                   FontFamily="Consolas, Cascadia Code, Courier New"
-                                                   FontSize="11.5"
-                                                   Foreground="{Binding Type, Converter={StaticResource DiffLineNoConverter}}"
-                                                   HorizontalAlignment="Right" />
-                                    </Border>
-                                    <!-- Copyable Line Text (TextBox for full selection & copy) -->
-                                    <TextBox Grid.Column="1"
-                                             Text="{Binding Text, Mode=OneWay}"
-                                             FontFamily="Consolas, Cascadia Code, Courier New"
-                                             FontSize="12"
-                                             Foreground="{Binding Type, Converter={StaticResource DiffFgConverter}}"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             IsReadOnly="True"
-                                             TextWrapping="NoWrap"
-                                             Padding="4,2"
-                                             SelectionBrush="#0284C7" />
-                                    <!-- Quick Copy Button for Line -->
-                                    <Button Grid.Column="2"
-                                            Content="📋"
-                                            Click="BtnCopyLine_Click"
-                                            ToolTip="Copy this line"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Cursor="Hand"
-                                            FontSize="10"
-                                            Padding="4,2"
-                                            Visibility="{Binding HasText, Converter={StaticResource BoolToVisConverter}}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                            <!-- Center Divider -->
+                            <Rectangle Grid.Column="1" Fill="#CBD5E1" />
 
-                <!-- Center Divider -->
-                <Rectangle Grid.Column="1" Fill="#E2E8F0" />
-
-                <!-- Right Incoming Pane -->
-                <ScrollViewer Grid.Column="2" x:Name="RightScrollViewer"
-                              HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Auto"
-                              ScrollChanged="RightScrollViewer_ScrollChanged">
-                    <ItemsControl ItemsSource="{Binding DiffItem.IncomingLines, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Background="{Binding Type, Converter={StaticResource DiffBgConverter}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="38" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <!-- Line Number -->
-                                    <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,4,2">
-                                        <TextBlock Text="{Binding DisplayLineNumber}"
-                                                   FontFamily="Consolas, Cascadia Code, Courier New"
-                                                   FontSize="11.5"
-                                                   Foreground="{Binding Type, Converter={StaticResource DiffLineNoConverter}}"
-                                                   HorizontalAlignment="Right" />
-                                    </Border>
-                                    <!-- Line-by-Line Insert Button -->
-                                    <Button Grid.Column="1"
-                                            Content="⬅️ Insert"
-                                            Click="BtnInsertLine_Click"
-                                            ToolTip="Insert or replace this incoming line into local merged config"
-                                            Style="{StaticResource MiniActionButtonStyle}"
-                                            Margin="4,1,2,1"
-                                            Visibility="{Binding CanInsert, Converter={StaticResource BoolToVisConverter}}" />
-                                    <!-- Copyable Line Text -->
-                                    <TextBox Grid.Column="2"
-                                             Text="{Binding Text, Mode=OneWay}"
-                                             FontFamily="Consolas, Cascadia Code, Courier New"
-                                             FontSize="12"
-                                             Foreground="{Binding Type, Converter={StaticResource DiffFgConverter}}"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             IsReadOnly="True"
-                                             TextWrapping="NoWrap"
-                                             Padding="4,2"
-                                             SelectionBrush="#0284C7" />
-                                    <!-- Quick Copy Button for Line -->
-                                    <Button Grid.Column="3"
-                                            Content="📋"
-                                            Click="BtnCopyLine_Click"
-                                            ToolTip="Copy this line"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Cursor="Hand"
-                                            FontSize="10"
-                                            Padding="4,2"
-                                            Visibility="{Binding HasText, Converter={StaticResource BoolToVisConverter}}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Grid>
+                            <!-- ================= RIGHT: INCOMING LINE ================= -->
+                            <Grid Grid.Column="2" Background="{Binding Incoming.Type, Converter={StaticResource DiffBgConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="38" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <!-- Line Number -->
+                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,4,2">
+                                    <TextBlock Text="{Binding Incoming.DisplayLineNumber}"
+                                               FontFamily="Consolas, Cascadia Code, Courier New"
+                                               FontSize="11.5"
+                                               Foreground="{Binding Incoming.Type, Converter={StaticResource DiffLineNoConverter}}"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                                <!-- Line-by-Line Insert Button -->
+                                <Button Grid.Column="1"
+                                        Content="⬅️ Insert"
+                                        Click="BtnInsertLine_Click"
+                                        ToolTip="Insert or replace this incoming line into local merged config"
+                                        Style="{StaticResource MiniActionButtonStyle}"
+                                        Margin="4,1,2,1"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding Incoming.CanInsert, Converter={StaticResource BoolToVisConverter}}" />
+                                <!-- Copyable Line Text -->
+                                <TextBox Grid.Column="2"
+                                         Text="{Binding Incoming.Text, Mode=OneWay}"
+                                         FontFamily="Consolas, Cascadia Code, Courier New"
+                                         FontSize="12"
+                                         Foreground="{Binding Incoming.Type, Converter={StaticResource DiffFgConverter}}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         IsReadOnly="True"
+                                         TextWrapping="NoWrap"
+                                         Padding="4,2"
+                                         VerticalAlignment="Center"
+                                         SelectionBrush="#0284C7" />
+                                <!-- Quick Copy Button -->
+                                <Button Grid.Column="3"
+                                        Content="📋"
+                                        Click="BtnCopyIncomingLine_Click"
+                                        ToolTip="Copy incoming line"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        FontSize="10"
+                                        Padding="4,2"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding Incoming.HasText, Converter={StaticResource BoolToVisConverter}}" />
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
         </Grid>
 
         <!-- ================= VIEW 2: DIRECT EDITOR ================= -->

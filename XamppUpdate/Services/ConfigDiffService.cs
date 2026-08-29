@@ -77,6 +77,7 @@ namespace XamppUpdate.Services
 
             var localList = new List<DiffLineModel>();
             var incomingList = new List<DiffLineModel>();
+            var rowList = new List<DiffRowModel>();
 
             int maxLines = Math.Max(diff.OldText.Lines.Count, diff.NewText.Lines.Count);
 
@@ -115,10 +116,18 @@ namespace XamppUpdate.Services
                     incomingModel.Type = DiffLineType.EmptyPlaceholder;
                 }
                 incomingList.Add(incomingModel);
+
+                rowList.Add(new DiffRowModel
+                {
+                    Index = i,
+                    Local = localModel,
+                    Incoming = incomingModel
+                });
             }
 
             item.LocalLines = localList;
             item.IncomingLines = incomingList;
+            item.DiffRows = rowList;
             item.AdditionsCount = adds;
             item.DeletionsCount = dels;
             item.ModificationsCount = mods;
