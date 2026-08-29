@@ -23,6 +23,9 @@ namespace XamppUpdate.ViewModels
         [ObservableProperty]
         private string _statusMessage = "Ready";
 
+        public string WindowTitle => AppInfo.WindowTitle;
+        public string AppVersionDisplay => $"v{AppInfo.Version} (Build {AppInfo.BuildNumber} · {AppInfo.BuildDate})";
+
         public ObservableCollection<ServiceItem> Services { get; } = new();
 
         public event Action? RequestOpenSettings;

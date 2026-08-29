@@ -130,5 +130,15 @@ namespace XamppUpdate.Tests
             bool stopped = await manager.StopServiceAsync(nonExistentName, TimeSpan.FromSeconds(1));
             Assert.True(stopped); // Nonexistent returns true as already stopped
         }
+
+        [Fact]
+        public void AppInfo_Properties_ArePopulatedCorrectly()
+        {
+            Assert.Equal("0.1", AppInfo.Version);
+            Assert.NotEmpty(AppInfo.BuildNumber);
+            Assert.NotEmpty(AppInfo.BuildDate);
+            Assert.Contains("0.1", AppInfo.WindowTitle);
+            Assert.Contains("Build", AppInfo.WindowTitle);
+        }
     }
 }

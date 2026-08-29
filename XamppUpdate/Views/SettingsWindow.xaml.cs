@@ -8,6 +8,7 @@ namespace XamppUpdate.Views
         public SettingsWindow(SettingsViewModel viewModel)
         {
             InitializeComponent();
+            Title = $"Settings - {AppInfo.AppName} v{AppInfo.Version}";
             DataContext = viewModel;
             viewModel.RequestClose += () => Close();
         }

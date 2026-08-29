@@ -6,7 +6,7 @@
         xmlns:controls="clr-namespace:XamppUpdate.Views.Controls"
         xmlns:conv="clr-namespace:XamppUpdate.Converters"
         mc:Ignorable="d"
-        Title="XAMPP Component Updater"
+        Title="{Binding WindowTitle}"
         Height="680" Width="920"
         MinHeight="550" MinWidth="750"
         WindowStartupLocation="CenterScreen"
@@ -43,7 +43,12 @@
                             <Image Source="pack://application:,,,/update.png" Width="36" Height="36" RenderOptions.BitmapScalingMode="HighQuality" />
                         </Border>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="XAMPP Component Updater" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="XAMPP Component Updater" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                <Border Background="{StaticResource PrimaryAccentSubtleBrush}" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="6" Padding="8,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding AppVersionDisplay}" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="11" FontWeight="Bold" />
+                                </Border>
+                            </StackPanel>
                             <TextBlock Text="Local Web Server Stack Management &amp; In-Place Update Utility" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
                         </StackPanel>
                     </StackPanel>

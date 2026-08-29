@@ -16,6 +16,7 @@ namespace XamppUpdate.Views
             Func<ApacheWizardViewModel> apacheWizardVmFactory)
         {
             InitializeComponent();
+            Title = AppInfo.WindowTitle;
             _viewModel = viewModel;
             _settingsVmFactory = settingsVmFactory;
             _apacheWizardVmFactory = apacheWizardVmFactory;

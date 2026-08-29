@@ -8,6 +8,7 @@ namespace XamppUpdate.Views
         public ApacheUpdateWizardWindow(ApacheWizardViewModel viewModel)
         {
             InitializeComponent();
+            Title = $"Apache Update Wizard - {AppInfo.AppName} v{AppInfo.Version}";
             DataContext = viewModel;
             viewModel.RequestClose += () => Close();
         }
