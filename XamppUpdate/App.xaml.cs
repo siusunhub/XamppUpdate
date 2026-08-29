@@ -23,11 +23,7 @@ namespace XamppUpdate
             // Register global exception handlers
             DispatcherUnhandledException += (s, args) =>
             {
-                MessageBox.Show(
-                    $"An unhandled application error occurred:\n\n{args.Exception.Message}\n\nStack trace:\n{args.Exception.StackTrace}",
-                    "Unexpected Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ErrorDialogWindow.Show(args.Exception, "Unhandled UI Exception");
                 args.Handled = true;
             };
 
@@ -35,12 +31,14 @@ namespace XamppUpdate
             {
                 if (args.ExceptionObject is Exception ex)
                 {
-                    MessageBox.Show(
-                        $"Fatal Domain Error:\n\n{ex.Message}",
-                        "Fatal Error",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
+                    ErrorDialogWindow.Show(ex, "Fatal Domain Exception");
                 }
+            };
+
+            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, args) =>
+            {
+                ErrorDialogWindow.Show(args.Exception, "Unobserved Task Exception");
+                args.SetObserved();
             };
 
             // Initialize Services
