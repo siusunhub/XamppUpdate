@@ -35,7 +35,10 @@ namespace XamppUpdate.ViewModels
         private string _composerExecutablePath = string.Empty;
 
         [ObservableProperty]
-        private string _composerWebTargetPath = string.Empty;
+        private string _composerDownloadTargetPath = string.Empty;
+
+        [ObservableProperty]
+        private string _composerWwwTargetPath = string.Empty;
 
         [ObservableProperty]
         private string _sslCertificatesPath = string.Empty;
@@ -77,7 +80,8 @@ namespace XamppUpdate.ViewModels
             MySqlServiceName = s.MySql.ServiceName;
 
             ComposerExecutablePath = s.Composer.ExecutablePath;
-            ComposerWebTargetPath = s.Composer.WebTargetPath;
+            ComposerDownloadTargetPath = s.Composer.DownloadTargetPath;
+            ComposerWwwTargetPath = s.Composer.WwwTargetPath;
 
             SslCertificatesPath = s.Ssl.CertificatesPath;
             SslKeysPath = s.Ssl.KeysPath;
@@ -106,7 +110,8 @@ namespace XamppUpdate.ViewModels
                 s.MySql.ServiceName = MySqlServiceName;
 
                 s.Composer.ExecutablePath = ComposerExecutablePath;
-                s.Composer.WebTargetPath = ComposerWebTargetPath;
+                s.Composer.DownloadTargetPath = ComposerDownloadTargetPath;
+                s.Composer.WwwTargetPath = ComposerWwwTargetPath;
 
                 s.Ssl.CertificatesPath = SslCertificatesPath;
                 s.Ssl.KeysPath = SslKeysPath;
@@ -197,16 +202,30 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
-        public void BrowseComposerTargetFolder()
+        public void BrowseComposerDownloadTarget()
         {
             var dialog = new OpenFolderDialog
             {
-                Title = "Select Composer Web Target Folder",
-                InitialDirectory = Directory.Exists(ComposerWebTargetPath) ? ComposerWebTargetPath : @"C:\"
+                Title = "Select Composer Download Target Folder (Archive Retention)",
+                InitialDirectory = Directory.Exists(ComposerDownloadTargetPath) ? ComposerDownloadTargetPath : @"C:\"
             };
             if (dialog.ShowDialog() == true)
             {
-                ComposerWebTargetPath = dialog.FolderName;
+                ComposerDownloadTargetPath = dialog.FolderName;
+            }
+        }
+
+        [RelayCommand]
+        public void BrowseComposerWwwTarget()
+        {
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Select Composer WWW Target Folder (Real Web Access)",
+                InitialDirectory = Directory.Exists(ComposerWwwTargetPath) ? ComposerWwwTargetPath : @"C:\"
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                ComposerWwwTargetPath = dialog.FolderName;
             }
         }
     }

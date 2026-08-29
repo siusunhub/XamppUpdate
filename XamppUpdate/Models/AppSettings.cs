@@ -76,7 +76,22 @@ namespace XamppUpdate.Models
     public class ComposerSettings
     {
         public string ExecutablePath { get; set; } = @"C:\ProgramData\ComposerSetup\bin\composer.bat";
-        public string WebTargetPath { get; set; } = @"C:\xampp\php\composer";
+        public string DownloadTargetPath { get; set; } = @"C:\xampp\composer_downloads";
+        public string WwwTargetPath { get; set; } = @"C:\xampp\htdocs\composer";
+
+        // Compatibility fallback for older configuration files
+        [JsonPropertyName("WebTargetPath")]
+        public string? LegacyWebTargetPath
+        {
+            get => null;
+            set
+            {
+                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(WwwTargetPath))
+                {
+                    WwwTargetPath = value;
+                }
+            }
+        }
     }
 
     public class SslSettings

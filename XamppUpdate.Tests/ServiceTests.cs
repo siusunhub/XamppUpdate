@@ -44,12 +44,18 @@ namespace XamppUpdate.Tests
             // Modify and save
             loaded.Apache.InstallationPath = @"D:\my_xampp\apache";
             loaded.General.MaxBackupRetentionCount = 5;
+            loaded.Composer.ExecutablePath = @"D:\tools\composer.bat";
+            loaded.Composer.DownloadTargetPath = @"D:\xampp\composer_downloads";
+            loaded.Composer.WwwTargetPath = @"D:\xampp\htdocs\composer";
             await service.SaveSettingsAsync(loaded);
 
             var service2 = new SettingsService(configPath);
             var reloaded = service2.LoadSettings();
             Assert.Equal(@"D:\my_xampp\apache", reloaded.Apache.InstallationPath);
             Assert.Equal(5, reloaded.General.MaxBackupRetentionCount);
+            Assert.Equal(@"D:\tools\composer.bat", reloaded.Composer.ExecutablePath);
+            Assert.Equal(@"D:\xampp\composer_downloads", reloaded.Composer.DownloadTargetPath);
+            Assert.Equal(@"D:\xampp\htdocs\composer", reloaded.Composer.WwwTargetPath);
         }
 
         [Fact]

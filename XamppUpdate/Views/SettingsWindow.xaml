@@ -118,12 +118,14 @@
                 <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,0,16">
                     <StackPanel>
                         <TextBlock Text="📦 Composer Package Manager" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12" />
-                        <Grid Margin="0,0,0,8">
+                        
+                        <!-- Composer Executable -->
+                        <Grid Margin="0,0,0,10">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <TextBlock Text="Primary Executable (composer.bat):" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                            <TextBlock Text="Composer Executable (composer.bat / composer.phar):" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
                             <Grid Grid.Row="1">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -133,19 +135,38 @@
                                 <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseComposerExecutableCommand}" Margin="8,0,0,0" />
                             </Grid>
                         </Grid>
-                        <Grid>
+
+                        <!-- Download Target (for backups/old copies) -->
+                        <Grid Margin="0,0,0,10">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <TextBlock Text="Secondary Web Target Folder:" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                            <TextBlock Text="Download Target Directory (Keep archive copies for backup):" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
                             <Grid Grid.Row="1">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding ComposerWebTargetPath, UpdateSourceTrigger=PropertyChanged}" />
-                                <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseComposerTargetFolderCommand}" Margin="8,0,0,0" />
+                                <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding ComposerDownloadTargetPath, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseComposerDownloadTargetCommand}" Margin="8,0,0,0" />
+                            </Grid>
+                        </Grid>
+
+                        <!-- WWW Target (real folder for web access) -->
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="WWW Target Directory (Real folder for web access):" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                            <Grid Grid.Row="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding ComposerWwwTargetPath, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseComposerWwwTargetCommand}" Margin="8,0,0,0" />
                             </Grid>
                         </Grid>
                     </StackPanel>

@@ -25,7 +25,8 @@
   },
   "Composer": {
     "ExecutablePath": "C:\\ProgramData\\ComposerSetup\\bin\\composer.bat",
-    "WebTargetPath": "C:\\xampp\\php\\composer"
+    "DownloadTargetPath": "C:\\xampp\\composer_downloads",
+    "WwwTargetPath": "C:\\xampp\\htdocs\\composer"
   },
   "Ssl": {
     "CertificatesPath": "C:\\xampp\\apache\\conf\\ssl.crt",
