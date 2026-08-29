@@ -74,11 +74,9 @@ namespace XamppUpdate
             try
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string configDir = Path.Combine(baseDir, "config");
                 string tempDir = Path.Combine(baseDir, "temp");
                 string backupDir = Path.Combine(baseDir, "backup");
 
-                if (!Directory.Exists(configDir)) Directory.CreateDirectory(configDir);
                 if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
                 if (!Directory.Exists(backupDir)) Directory.CreateDirectory(backupDir);
             }

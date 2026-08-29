@@ -33,7 +33,7 @@ namespace XamppUpdate.Tests
         [Fact]
         public async Task SettingsService_LoadAndSave_WorksCorrectly()
         {
-            string configPath = Path.Combine(_testTempDir, "config", "settings.json");
+            string configPath = Path.Combine(_testTempDir, "XamppUpdate.config.json");
             var service = new SettingsService(configPath);
 
             var loaded = service.LoadSettings();

@@ -25,9 +25,11 @@ namespace XamppUpdate.Services
         public string ConfigFilePath => _configFilePath;
         public AppSettings CurrentSettings => _currentSettings;
 
+        public const string DefaultConfigFileName = "XamppUpdate.config.json";
+
         public SettingsService(string? customConfigPath = null)
         {
-            _configFilePath = customConfigPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config", "settings.json");
+            _configFilePath = customConfigPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DefaultConfigFileName);
             _currentSettings = LoadSettings();
         }
 
@@ -43,6 +45,22 @@ namespace XamppUpdate.Services
                     {
                         _currentSettings = settings;
                         return _currentSettings;
+                    }
+                }
+                else
+                {
+                    // Fallback migration: check if legacy config/settings.json exists
+                    string legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config", "settings.json");
+                    if (File.Exists(legacyPath))
+                    {
+                        string json = File.ReadAllText(legacyPath, Encoding.UTF8);
+                        var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
+                        if (settings != null)
+                        {
+                            _currentSettings = settings;
+                            _ = SaveSettingsAsync(_currentSettings);
+                            return _currentSettings;
+                        }
                     }
                 }
             }
