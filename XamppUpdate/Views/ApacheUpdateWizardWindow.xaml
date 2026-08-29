@@ -107,6 +107,42 @@
                             <TextBlock Text="Provide an Apache distribution archive (.zip or .7z) downloaded from Apache Lounge or enter a direct download URL."
                                        FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,20" />
 
+                            <!-- Apache Lounge Download Link Banner -->
+                            <Border Background="{StaticResource PrimaryAccentSubtleBrush}"
+                                    BorderBrush="#BAE6FD"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="14,10"
+                                    Margin="0,0,0,16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🌐 " FontSize="13" VerticalAlignment="Center" />
+                                            <TextBlock Text="Download Latest Apache Win64 Binaries:" FontWeight="SemiBold" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="12.5" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <TextBlock Text="https://www.apachelounge.com/download/"
+                                                   Foreground="#0369A1"
+                                                   FontSize="12"
+                                                   FontFamily="Consolas, Cascadia Code, Courier New"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource RoundedButtonStyle}"
+                                            Command="{Binding OpenApacheLoungeUrlCommand}"
+                                            ToolTip="Open https://www.apachelounge.com/download/ in web browser"
+                                            Padding="14,6"
+                                            VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🔗 Open Download Page" Foreground="{StaticResource PrimaryAccentBrush}" FontWeight="SemiBold" FontSize="12" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </Border>
+
                             <!-- Source Input -->
                             <TextBlock Text="Archive File Path or Download URL:" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,6" />
                             <Grid Margin="0,0,0,16">
@@ -127,7 +163,7 @@
                             <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,20">
                                 <StackPanel>
                                     <TextBlock Text="💡 Supported formats &amp; sources:" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" />
-                                    <TextBlock Text="• Official Apache Lounge x64 distribution zip (e.g., httpd-2.4.63-250207-win64-VS17.zip)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,4,0,0" />
+                                    <TextBlock Text="• Official Apache Lounge x64 zip: https://www.apachelounge.com/download/ (e.g. httpd-2.4.63-250207-win64-VS17.zip)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,4,0,0" />
                                     <TextBlock Text="• Archives with nested 'Apache24/' or direct root files are automatically resolved." Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,2,0,0" />
                                     <TextBlock Text="• The existing configuration will be compared and safely preserved." Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,2,0,0" />
                                 </StackPanel>

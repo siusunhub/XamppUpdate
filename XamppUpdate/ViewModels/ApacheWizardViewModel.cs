@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -100,6 +101,23 @@ namespace XamppUpdate.ViewModels
             {
                 SourcePathOrUrl = dialog.FileName;
                 IsLocalSource = true;
+            }
+        }
+
+        [RelayCommand]
+        public void OpenApacheLoungeUrl()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://www.apachelounge.com/download/",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Could not open web browser: {ex.Message}";
             }
         }
 
