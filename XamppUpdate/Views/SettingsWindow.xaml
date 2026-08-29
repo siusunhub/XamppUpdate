@@ -8,6 +8,7 @@
         Height="620" Width="720"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
+        Icon="pack://application:,,,/app.ico"
         Background="{StaticResource WindowBgBrush}">
 
     <Grid>

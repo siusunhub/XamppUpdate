@@ -10,6 +10,7 @@
         Height="720" Width="1060"
         MinHeight="600" MinWidth="850"
         WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/app.ico"
         Background="{StaticResource WindowBgBrush}">
 
     <Window.Resources>

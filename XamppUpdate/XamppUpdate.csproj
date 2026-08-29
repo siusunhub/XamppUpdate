@@ -14,14 +14,22 @@
     <Company>Local Server Tools</Company>
     <Product>XAMPP Component Updater</Product>
     <NoWarn>$(NoWarn);NU1902</NoWarn>
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
-  <!-- Route Release build directly to public directory at project root -->
+  <!-- Configure framework-dependent single-file publish directly to public directory -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <OutputPath>..\public\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishDir>..\public\</PublishDir>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="app.ico" />
+    <Resource Include="update.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
