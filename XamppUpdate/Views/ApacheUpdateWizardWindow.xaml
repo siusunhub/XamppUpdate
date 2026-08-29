@@ -230,9 +230,9 @@
                                        FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Border Background="#E0F2FE" CornerRadius="6" Padding="10,4">
-                                <TextBlock Text="{Binding IncomingDetectedVersion, StringFormat='Incoming Version: {0}'}"
-                                           Foreground="#0369A1" FontSize="12" FontWeight="SemiBold" />
+                            <Border Background="#E0F2FE" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="6" Padding="12,5">
+                                <TextBlock Text="{Binding VersionTransitionDisplay}"
+                                           Foreground="#0369A1" FontSize="12" FontWeight="Bold" />
                             </Border>
                         </StackPanel>
                     </Grid>
@@ -357,7 +357,12 @@
                 <!-- Step 3 Checklist Card -->
                 <Border Grid.Row="0" Style="{StaticResource CardBorderStyle}" Padding="18,14" Margin="0,0,0,12">
                     <StackPanel>
-                        <TextBlock Text="Step 3: Update Execution Pipeline Checklist" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8" />
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Step 3: Update Execution Pipeline Checklist" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                            <Border HorizontalAlignment="Right" Background="#E0F2FE" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="6" Padding="10,3">
+                                <TextBlock Text="{Binding VersionTransitionDisplay}" Foreground="#0369A1" FontSize="11.5" FontWeight="Bold" />
+                            </Border>
+                        </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />

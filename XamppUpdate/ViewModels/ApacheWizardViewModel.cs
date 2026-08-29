@@ -32,10 +32,26 @@ namespace XamppUpdate.ViewModels
         private string _preparedIncomingRoot = string.Empty;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
         private string _currentInstalledVersion = "Detecting...";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
         private string _incomingDetectedVersion = "Pending...";
+
+        public string VersionTransitionDisplay
+        {
+            get
+            {
+                string fromVer = string.IsNullOrWhiteSpace(CurrentInstalledVersion) || CurrentInstalledVersion == "Detecting..."
+                    ? "Unknown"
+                    : CurrentInstalledVersion;
+                string toVer = string.IsNullOrWhiteSpace(IncomingDetectedVersion) || IncomingDetectedVersion == "Pending..."
+                    ? "Unknown"
+                    : IncomingDetectedVersion;
+                return $"Update from {fromVer} to {toVer}";
+            }
+        }
 
         [ObservableProperty]
         private ConfigDiffItem? _selectedDiffItem;

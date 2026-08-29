@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using XamppUpdate.Models;
 using XamppUpdate.Services;
+using XamppUpdate.ViewModels;
 using Xunit;
 
 namespace XamppUpdate.Tests
@@ -143,6 +144,26 @@ namespace XamppUpdate.Tests
             Assert.NotEmpty(AppInfo.BuildDate);
             Assert.Contains("0.1", AppInfo.WindowTitle);
             Assert.Contains("Build", AppInfo.WindowTitle);
+        }
+
+        [Fact]
+        public async Task ApacheWizardViewModel_VersionTransitionDisplay_FormatsCorrectly()
+        {
+            var vm = new ApacheWizardViewModel(
+                new ApacheUpdateService(
+                    new SettingsService(Path.Combine(_testTempDir, "cfg.json")),
+                    new WindowsServiceManager(),
+                    new VersionDetectionService(),
+                    new ArchiveService(),
+                    new ConfigDiffService()),
+                new SettingsService(Path.Combine(_testTempDir, "cfg2.json")),
+                new VersionDetectionService());
+
+            await Task.Delay(100);
+            vm.CurrentInstalledVersion = "2.4.58";
+            vm.IncomingDetectedVersion = "2.4.63";
+
+            Assert.Equal("Update from 2.4.58 to 2.4.63", vm.VersionTransitionDisplay);
         }
 
         [Fact]
