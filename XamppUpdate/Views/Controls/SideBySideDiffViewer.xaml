@@ -5,139 +5,354 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:conv="clr-namespace:XamppUpdate.Converters"
              mc:Ignorable="d" 
-             d:DesignHeight="450" d:DesignWidth="800">
+             d:DesignHeight="550" d:DesignWidth="850">
     <UserControl.Resources>
         <conv:DiffTypeToBrushConverter x:Key="DiffBgConverter" TargetProperty="Background" />
         <conv:DiffTypeToBrushConverter x:Key="DiffFgConverter" TargetProperty="Foreground" />
         <conv:DiffTypeToBrushConverter x:Key="DiffLineNoConverter" TargetProperty="LineNumberFg" />
         <conv:BoolToVisibilityConverter x:Key="BoolToVisConverter" />
+        <conv:InverseBooleanConverter x:Key="InverseBoolConverter" />
+
+        <Style x:Key="MiniActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#E0F2FE" />
+            <Setter Property="Foreground" Value="#0369A1" />
+            <Setter Property="BorderBrush" Value="#BAE6FD" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#BAE6FD" />
+                    <Setter Property="Foreground" Value="#0284C7" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid Background="#FFFFFF">
         <Grid.RowDefinitions>
-            <!-- Header -->
+            <!-- Top Mode Switch & Global Action Bar -->
             <RowDefinition Height="Auto" />
-            <!-- Diff Viewport -->
+            <!-- Main Content Area: Side-by-Side OR Direct Editor -->
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Column Headers -->
-        <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="12,8">
+        <!-- Top Tool Bar -->
+        <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="12,8">
             <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Mode Switch Tabs -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <RadioButton x:Name="RbDiffMode"
+                                 Content="🔍 Side-by-Side Diff"
+                                 IsChecked="True"
+                                 Checked="Mode_Checked"
+                                 Style="{StaticResource ModernRadioButtonStyle}"
+                                 FontWeight="Bold"
+                                 FontSize="12"
+                                 Margin="0,0,16,0" />
+                    <RadioButton x:Name="RbEditMode"
+                                 Content="✏️ Direct Edit Local Config"
+                                 Checked="Mode_Checked"
+                                 Style="{StaticResource ModernRadioButtonStyle}"
+                                 FontWeight="Bold"
+                                 FontSize="12"
+                                 Margin="0,0,16,0" />
+                </StackPanel>
+
+                <!-- Status & Feedback Notice -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Border x:Name="BorderActionNotice"
+                            Visibility="Collapsed"
+                            Background="#DCFCE7"
+                            BorderBrush="#86EFAC"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="8,2"
+                            Margin="6,0">
+                        <TextBlock x:Name="TxtActionNotice" Text="✓ Action completed" FontSize="11" FontWeight="SemiBold" Foreground="#15803D" />
+                    </Border>
+
+                    <Border Background="#FEF3C7" BorderBrush="#FDE68A" BorderThickness="1" CornerRadius="4" Padding="6,2"
+                            Visibility="{Binding DiffItem.IsCustomMerged, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="✏️ Custom Merged / Edited" FontSize="11" FontWeight="Bold" Foreground="#B45309" />
+                    </Border>
+                </StackPanel>
+
+                <!-- Quick Copy Buttons -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="📋 Copy All Local"
+                            Click="BtnCopyAllLocal_Click"
+                            Style="{StaticResource MiniActionButtonStyle}"
+                            ToolTip="Copy entire current/merged local configuration to clipboard"
+                            Margin="0,0,6,0" />
+                    <Button Content="📋 Copy All Incoming"
+                            Click="BtnCopyAllIncoming_Click"
+                            Style="{StaticResource MiniActionButtonStyle}"
+                            ToolTip="Copy entire incoming configuration to clipboard" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ================= VIEW 1: SIDE-BY-SIDE DIFF ================= -->
+        <Grid Grid.Row="1" x:Name="GridDiffView">
+            <Grid.RowDefinitions>
+                <!-- Column Headers -->
+                <RowDefinition Height="Auto" />
+                <!-- Diff Viewport -->
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Column Headers -->
+            <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="12,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left Column Header -->
+                    <DockPanel Grid.Column="0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Current Local Config (Working)" FontWeight="Bold" FontSize="12" Foreground="#0F172A" />
+                            <Border Background="#FEE2E2" CornerRadius="4" Padding="6,1" Margin="8,0,0,0"
+                                    Visibility="{Binding DiffItem.DeletionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
+                                <TextBlock Text="{Binding DiffItem.DeletionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='-{0} removed'}"
+                                           Foreground="#B91C1C" FontSize="11" FontWeight="SemiBold" />
+                            </Border>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!-- Center Divider -->
+                    <Rectangle Grid.Column="1" Fill="#CBD5E1" />
+
+                    <!-- Right Column Header -->
+                    <DockPanel Grid.Column="2" Margin="12,0,0,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Incoming New Config" FontWeight="Bold" FontSize="12" Foreground="#0F172A" />
+                            <Border Background="#DCFCE7" CornerRadius="4" Padding="6,1" Margin="8,0,0,0"
+                                    Visibility="{Binding DiffItem.AdditionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
+                                <TextBlock Text="{Binding DiffItem.AdditionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='+{0} added'}"
+                                           Foreground="#15803D" FontSize="11" FontWeight="SemiBold" />
+                            </Border>
+                            <Border Background="#FEF3C7" CornerRadius="4" Padding="6,1" Margin="6,0,0,0"
+                                    Visibility="{Binding DiffItem.ModificationsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
+                                <TextBlock Text="{Binding DiffItem.ModificationsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='~{0} modified'}"
+                                           Foreground="#B45309" FontSize="11" FontWeight="SemiBold" />
+                            </Border>
+                        </StackPanel>
+                    </DockPanel>
+                </Grid>
+            </Border>
+
+            <!-- Side-by-Side Content with synchronized scrolling -->
+            <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="1" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Left Column Header -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Current Local Config" FontWeight="Bold" FontSize="12.5" Foreground="#0F172A" />
-                    <Border Background="#FEE2E2" CornerRadius="4" Padding="6,1" Margin="10,0,0,0"
-                            Visibility="{Binding DiffItem.DeletionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
-                        <TextBlock Text="{Binding DiffItem.DeletionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='-{0} removed'}"
-                                   Foreground="#B91C1C" FontSize="11" FontWeight="SemiBold" />
-                    </Border>
-                </StackPanel>
+                <!-- Left Local Pane -->
+                <ScrollViewer Grid.Column="0" x:Name="LeftScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Hidden"
+                              ScrollChanged="LeftScrollViewer_ScrollChanged">
+                    <ItemsControl ItemsSource="{Binding DiffItem.LocalLines, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Background="{Binding Type, Converter={StaticResource DiffBgConverter}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="38" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <!-- Line Number -->
+                                    <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,4,2">
+                                        <TextBlock Text="{Binding DisplayLineNumber}"
+                                                   FontFamily="Consolas, Cascadia Code, Courier New"
+                                                   FontSize="11.5"
+                                                   Foreground="{Binding Type, Converter={StaticResource DiffLineNoConverter}}"
+                                                   HorizontalAlignment="Right" />
+                                    </Border>
+                                    <!-- Copyable Line Text (TextBox for full selection & copy) -->
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding Text, Mode=OneWay}"
+                                             FontFamily="Consolas, Cascadia Code, Courier New"
+                                             FontSize="12"
+                                             Foreground="{Binding Type, Converter={StaticResource DiffFgConverter}}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             IsReadOnly="True"
+                                             TextWrapping="NoWrap"
+                                             Padding="4,2"
+                                             SelectionBrush="#0284C7" />
+                                    <!-- Quick Copy Button for Line -->
+                                    <Button Grid.Column="2"
+                                            Content="📋"
+                                            Click="BtnCopyLine_Click"
+                                            ToolTip="Copy this line"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            FontSize="10"
+                                            Padding="4,2"
+                                            Visibility="{Binding HasText, Converter={StaticResource BoolToVisConverter}}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
 
                 <!-- Center Divider -->
-                <Rectangle Grid.Column="1" Fill="#CBD5E1" />
+                <Rectangle Grid.Column="1" Fill="#E2E8F0" />
 
-                <!-- Right Column Header -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="Incoming New Config" FontWeight="Bold" FontSize="12.5" Foreground="#0F172A" />
-                    <Border Background="#DCFCE7" CornerRadius="4" Padding="6,1" Margin="10,0,0,0"
-                            Visibility="{Binding DiffItem.AdditionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
-                        <TextBlock Text="{Binding DiffItem.AdditionsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='+{0} added'}"
-                                   Foreground="#15803D" FontSize="11" FontWeight="SemiBold" />
-                    </Border>
-                    <Border Background="#FEF3C7" CornerRadius="4" Padding="6,1" Margin="6,0,0,0"
-                            Visibility="{Binding DiffItem.ModificationsCount, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
-                        <TextBlock Text="{Binding DiffItem.ModificationsCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='~{0} modified'}"
-                                   Foreground="#B45309" FontSize="11" FontWeight="SemiBold" />
-                    </Border>
-                </StackPanel>
+                <!-- Right Incoming Pane -->
+                <ScrollViewer Grid.Column="2" x:Name="RightScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              ScrollChanged="RightScrollViewer_ScrollChanged">
+                    <ItemsControl ItemsSource="{Binding DiffItem.IncomingLines, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Background="{Binding Type, Converter={StaticResource DiffBgConverter}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="38" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <!-- Line Number -->
+                                    <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,4,2">
+                                        <TextBlock Text="{Binding DisplayLineNumber}"
+                                                   FontFamily="Consolas, Cascadia Code, Courier New"
+                                                   FontSize="11.5"
+                                                   Foreground="{Binding Type, Converter={StaticResource DiffLineNoConverter}}"
+                                                   HorizontalAlignment="Right" />
+                                    </Border>
+                                    <!-- Line-by-Line Insert Button -->
+                                    <Button Grid.Column="1"
+                                            Content="⬅️ Insert"
+                                            Click="BtnInsertLine_Click"
+                                            ToolTip="Insert or replace this incoming line into local merged config"
+                                            Style="{StaticResource MiniActionButtonStyle}"
+                                            Margin="4,1,2,1"
+                                            Visibility="{Binding CanInsert, Converter={StaticResource BoolToVisConverter}}" />
+                                    <!-- Copyable Line Text -->
+                                    <TextBox Grid.Column="2"
+                                             Text="{Binding Text, Mode=OneWay}"
+                                             FontFamily="Consolas, Cascadia Code, Courier New"
+                                             FontSize="12"
+                                             Foreground="{Binding Type, Converter={StaticResource DiffFgConverter}}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             IsReadOnly="True"
+                                             TextWrapping="NoWrap"
+                                             Padding="4,2"
+                                             SelectionBrush="#0284C7" />
+                                    <!-- Quick Copy Button for Line -->
+                                    <Button Grid.Column="3"
+                                            Content="📋"
+                                            Click="BtnCopyLine_Click"
+                                            ToolTip="Copy this line"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            FontSize="10"
+                                            Padding="4,2"
+                                            Visibility="{Binding HasText, Converter={StaticResource BoolToVisConverter}}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </Grid>
-        </Border>
+        </Grid>
 
-        <!-- Side-by-Side Content with synchronized scrolling -->
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="1" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+        <!-- ================= VIEW 2: DIRECT EDITOR ================= -->
+        <Grid Grid.Row="1" x:Name="GridEditView" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <!-- Editor Action Toolbar -->
+                <RowDefinition Height="Auto" />
+                <!-- Editor Area -->
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-            <!-- Left Local Pane -->
-            <ScrollViewer Grid.Column="0" x:Name="LeftScrollViewer"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Hidden"
-                          ScrollChanged="LeftScrollViewer_ScrollChanged">
-                <ItemsControl ItemsSource="{Binding DiffItem.LocalLines, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Background="{Binding Type, Converter={StaticResource DiffBgConverter}}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="42" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <!-- Line Number -->
-                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,6,2">
-                                    <TextBlock Text="{Binding DisplayLineNumber}"
-                                               FontFamily="Consolas, Cascadia Mono, Courier New"
-                                               FontSize="11.5"
-                                               Foreground="{Binding Type, Converter={StaticResource DiffLineNoConverter}}"
-                                               HorizontalAlignment="Right" />
-                                </Border>
-                                <!-- Line Text -->
-                                <TextBlock Grid.Column="1" Text="{Binding Text}"
-                                           FontFamily="Consolas, Cascadia Mono, Courier New"
-                                           FontSize="12"
-                                           Foreground="{Binding Type, Converter={StaticResource DiffFgConverter}}"
-                                           Padding="6,2"
-                                           TextWrapping="NoWrap" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <!-- Editor Action Toolbar -->
+            <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="12,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-            <!-- Center Divider -->
-            <Rectangle Grid.Column="1" Fill="#E2E8F0" />
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Editing Local / Merged Config: " FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                        <TextBlock Text="{Binding DiffItem.RelativeFilePath, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                    </StackPanel>
 
-            <!-- Right Incoming Pane -->
-            <ScrollViewer Grid.Column="2" x:Name="RightScrollViewer"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
-                          ScrollChanged="RightScrollViewer_ScrollChanged">
-                <ItemsControl ItemsSource="{Binding DiffItem.IncomingLines, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Background="{Binding Type, Converter={StaticResource DiffBgConverter}}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="42" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <!-- Line Number -->
-                                <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,6,2">
-                                    <TextBlock Text="{Binding DisplayLineNumber}"
-                                               FontFamily="Consolas, Cascadia Mono, Courier New"
-                                               FontSize="11.5"
-                                               Foreground="{Binding Type, Converter={StaticResource DiffLineNoConverter}}"
-                                               HorizontalAlignment="Right" />
-                                </Border>
-                                <!-- Line Text -->
-                                <TextBlock Grid.Column="1" Text="{Binding Text}"
-                                           FontFamily="Consolas, Cascadia Mono, Courier New"
-                                           FontSize="12"
-                                           Foreground="{Binding Type, Converter={StaticResource DiffFgConverter}}"
-                                           Padding="6,2"
-                                           TextWrapping="NoWrap" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="💾 Apply Edits to Merge"
+                                Click="BtnApplyDirectEdit_Click"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Padding="12,5" Margin="0,0,6,0"
+                                ToolTip="Save your edits as the merged config and recalculate diff" />
+                        <Button Content="⏪ Revert to Original Local"
+                                Click="BtnRevertLocal_Click"
+                                Style="{StaticResource RoundedButtonStyle}"
+                                Padding="10,5" Margin="0,0,6,0"
+                                ToolTip="Revert back to original untouched local configuration" />
+                        <Button Content="📥 Fill with Incoming Default"
+                                Click="BtnFillIncoming_Click"
+                                Style="{StaticResource RoundedButtonStyle}"
+                                Padding="10,5" Margin="0,0,6,0"
+                                ToolTip="Replace editor content with the incoming new default configuration" />
+                        <Button Content="📋 Copy Text"
+                                Click="BtnCopyEditorText_Click"
+                                Style="{StaticResource RoundedButtonStyle}"
+                                Padding="10,5"
+                                ToolTip="Copy all editor text to clipboard" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Text Editor -->
+            <TextBox Grid.Row="1" x:Name="TxtDirectEditor"
+                     Background="#0F172A"
+                     Foreground="#F8FAFC"
+                     CaretBrush="#38BDF8"
+                     SelectionBrush="#0284C7"
+                     BorderThickness="0"
+                     FontFamily="Consolas, Cascadia Code, Courier New"
+                     FontSize="12.5"
+                     AcceptsReturn="True"
+                     AcceptsTab="True"
+                     TextWrapping="NoWrap"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Auto"
+                     Padding="12" />
         </Grid>
     </Grid>
 </UserControl>

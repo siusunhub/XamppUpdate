@@ -8,5 +8,6 @@ namespace XamppUpdate.Services
     {
         Task<List<ConfigDiffItem>> CompareConfigFilesAsync(string localApacheRoot, string incomingApacheRoot, IEnumerable<string> relativeConfigPaths);
         Task<ConfigDiffItem> CompareSingleFileAsync(string localFilePath, string incomingFilePath, string relativeFilePath);
+        void RebuildDiff(ConfigDiffItem item, string workingLocalText, string incomingText);
     }
 }

@@ -52,69 +52,77 @@ namespace XamppUpdate.Services
                 string oldText = item.LocalExists ? await File.ReadAllTextAsync(localFilePath, Encoding.UTF8) : string.Empty;
                 string newText = item.IncomingExists ? await File.ReadAllTextAsync(incomingFilePath, Encoding.UTF8) : string.Empty;
 
+                item.OriginalLocalContent = oldText;
+                item.IncomingContent = newText;
+                item.MergedContent = oldText;
+
                 if (!item.LocalExists && !item.IncomingExists)
                 {
                     item.HasDifferences = false;
                     return item;
                 }
 
-                var diff = _diffBuilder.BuildDiffModel(oldText, newText);
-
-                int adds = 0;
-                int dels = 0;
-                int mods = 0;
-
-                var localList = new List<DiffLineModel>();
-                var incomingList = new List<DiffLineModel>();
-
-                int maxLines = Math.Max(diff.OldText.Lines.Count, diff.NewText.Lines.Count);
-
-                for (int i = 0; i < maxLines; i++)
-                {
-                    var oldLine = i < diff.OldText.Lines.Count ? diff.OldText.Lines[i] : null;
-                    var newLine = i < diff.NewText.Lines.Count ? diff.NewText.Lines[i] : null;
-
-                    var localModel = new DiffLineModel();
-                    if (oldLine != null)
-                    {
-                        localModel.LineNumber = oldLine.Position;
-                        localModel.Text = oldLine.Text ?? string.Empty;
-                        localModel.Type = MapDiffType(oldLine.Type);
-
-                        if (oldLine.Type == ChangeType.Deleted) dels++;
-                        else if (oldLine.Type == ChangeType.Modified) mods++;
-                    }
-                    else
-                    {
-                        localModel.Type = DiffLineType.EmptyPlaceholder;
-                    }
-                    localList.Add(localModel);
-
-                    var incomingModel = new DiffLineModel();
-                    if (newLine != null)
-                    {
-                        incomingModel.LineNumber = newLine.Position;
-                        incomingModel.Text = newLine.Text ?? string.Empty;
-                        incomingModel.Type = MapDiffType(newLine.Type);
-
-                        if (newLine.Type == ChangeType.Inserted) adds++;
-                    }
-                    else
-                    {
-                        incomingModel.Type = DiffLineType.EmptyPlaceholder;
-                    }
-                    incomingList.Add(incomingModel);
-                }
-
-                item.LocalLines = localList;
-                item.IncomingLines = incomingList;
-                item.AdditionsCount = adds;
-                item.DeletionsCount = dels;
-                item.ModificationsCount = mods;
-                item.HasDifferences = (adds > 0 || dels > 0 || mods > 0 || item.LocalExists != item.IncomingExists);
-
+                RebuildDiff(item, oldText, newText);
                 return item;
             });
+        }
+
+        public void RebuildDiff(ConfigDiffItem item, string workingLocalText, string incomingText)
+        {
+            var diff = _diffBuilder.BuildDiffModel(workingLocalText, incomingText);
+
+            int adds = 0;
+            int dels = 0;
+            int mods = 0;
+
+            var localList = new List<DiffLineModel>();
+            var incomingList = new List<DiffLineModel>();
+
+            int maxLines = Math.Max(diff.OldText.Lines.Count, diff.NewText.Lines.Count);
+
+            for (int i = 0; i < maxLines; i++)
+            {
+                var oldLine = i < diff.OldText.Lines.Count ? diff.OldText.Lines[i] : null;
+                var newLine = i < diff.NewText.Lines.Count ? diff.NewText.Lines[i] : null;
+
+                var localModel = new DiffLineModel();
+                if (oldLine != null)
+                {
+                    localModel.LineNumber = oldLine.Position;
+                    localModel.Text = oldLine.Text ?? string.Empty;
+                    localModel.Type = MapDiffType(oldLine.Type);
+
+                    if (oldLine.Type == ChangeType.Deleted) dels++;
+                    else if (oldLine.Type == ChangeType.Modified) mods++;
+                }
+                else
+                {
+                    localModel.Type = DiffLineType.EmptyPlaceholder;
+                }
+                localList.Add(localModel);
+
+                var incomingModel = new DiffLineModel();
+                if (newLine != null)
+                {
+                    incomingModel.LineNumber = newLine.Position;
+                    incomingModel.Text = newLine.Text ?? string.Empty;
+                    incomingModel.Type = MapDiffType(newLine.Type);
+
+                    if (newLine.Type == ChangeType.Inserted) adds++;
+                }
+                else
+                {
+                    incomingModel.Type = DiffLineType.EmptyPlaceholder;
+                }
+                incomingList.Add(incomingModel);
+            }
+
+            item.LocalLines = localList;
+            item.IncomingLines = incomingList;
+            item.AdditionsCount = adds;
+            item.DeletionsCount = dels;
+            item.ModificationsCount = mods;
+            item.HasDifferences = (adds > 0 || dels > 0 || mods > 0 || item.LocalExists != item.IncomingExists);
         }
 
         private static DiffLineType MapDiffType(ChangeType type)

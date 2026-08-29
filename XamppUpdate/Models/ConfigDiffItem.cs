@@ -38,11 +38,26 @@ namespace XamppUpdate.Models
         [ObservableProperty]
         private string _mergedContent = string.Empty;
 
-        public List<DiffLineModel> LocalLines { get; set; } = new();
-        public List<DiffLineModel> IncomingLines { get; set; } = new();
+        [ObservableProperty]
+        private string _originalLocalContent = string.Empty;
 
-        public string SummaryText => HasDifferences
-            ? $"+{AdditionsCount} / -{DeletionsCount} changes"
-            : (LocalExists && IncomingExists ? "Identical" : (LocalExists ? "New file missing" : "Local file missing"));
+        [ObservableProperty]
+        private string _incomingContent = string.Empty;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(SummaryText))]
+        private bool _isCustomMerged;
+
+        [ObservableProperty]
+        private List<DiffLineModel> _localLines = new();
+
+        [ObservableProperty]
+        private List<DiffLineModel> _incomingLines = new();
+
+        public string SummaryText => IsCustomMerged
+            ? "Custom Merged / Edited"
+            : (HasDifferences
+                ? $"+{AdditionsCount} / -{DeletionsCount} changes"
+                : (LocalExists && IncomingExists ? "Identical" : (LocalExists ? "New file missing" : "Local file missing")));
     }
 }

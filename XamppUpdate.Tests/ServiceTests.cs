@@ -76,6 +76,13 @@ namespace XamppUpdate.Tests
             Assert.NotEmpty(result.LocalLines);
             Assert.NotEmpty(result.IncomingLines);
             Assert.Equal(result.LocalLines.Count, result.IncomingLines.Count);
+
+            // Test RebuildDiff after user modifies content to match incoming
+            diffService.RebuildDiff(result, "ServerRoot \"C:/Apache24\"\nListen 80\nServerName localhost:80\n# New Comment\n", "ServerRoot \"C:/Apache24\"\nListen 80\nServerName localhost:80\n# New Comment\n");
+            Assert.False(result.HasDifferences);
+            Assert.Equal(0, result.AdditionsCount);
+            Assert.Equal(0, result.DeletionsCount);
+            Assert.Equal(0, result.ModificationsCount);
         }
 
         [Fact]

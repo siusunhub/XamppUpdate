@@ -296,11 +296,18 @@
                                                      Content="Preserve Current Local (Recommended)"
                                                      IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=KeepCurrent}"
                                                      FontWeight="SemiBold"
-                                                     Margin="0,0,20,0" />
+                                                     Margin="0,0,16,0" />
 
                                         <RadioButton Style="{StaticResource ModernRadioButtonStyle}"
                                                      Content="Overwrite with Incoming Default"
-                                                     IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=OverwriteWithNew}" />
+                                                     IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=OverwriteWithNew}"
+                                                     FontWeight="SemiBold"
+                                                     Margin="0,0,16,0" />
+
+                                        <RadioButton Style="{StaticResource ModernRadioButtonStyle}"
+                                                     Content="Use Custom Merged / Edited"
+                                                     IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=UseMerged}"
+                                                     FontWeight="SemiBold" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
