@@ -108,15 +108,90 @@ namespace XamppUpdate.Services
 
             await Task.Run(() =>
             {
-                progress?.Report($"Creating backup zip: {Path.GetFileName(destinationZipFilePath)}...");
+                progress?.Report($"Creating backup zip: {Path.GetFileName(destinationZipFilePath)} (skipping log files)...");
                 if (File.Exists(destinationZipFilePath))
                 {
                     File.Delete(destinationZipFilePath);
                 }
 
-                ZipFile.CreateFromDirectory(sourceDirectory, destinationZipFilePath, CompressionLevel.Optimal, false);
+                var dirInfo = new DirectoryInfo(sourceDirectory);
+                var allFiles = dirInfo.GetFiles("*", SearchOption.AllDirectories);
+
+                using (var zipStream = new FileStream(destinationZipFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var zipArchive = new ZipArchive(zipStream, ZipArchiveMode.Create))
+                {
+                    int totalFiles = allFiles.Length;
+                    int processed = 0;
+                    int added = 0;
+                    int skippedLogs = 0;
+
+                    foreach (var file in allFiles)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        processed++;
+
+                        string relativePath = Path.GetRelativePath(sourceDirectory, file.FullName);
+
+                        if (IsLogFile(relativePath))
+                        {
+                            skippedLogs++;
+                            continue;
+                        }
+
+                        try
+                        {
+                            var entry = zipArchive.CreateEntry(relativePath, CompressionLevel.Optimal);
+                            entry.LastWriteTime = file.LastWriteTime;
+
+                            using var entryStream = entry.Open();
+                            using var fileStream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                            fileStream.CopyTo(entryStream);
+                            added++;
+                        }
+                        catch (Exception ex)
+                        {
+                            progress?.Report($"[BACKUP WARNING] Skipped file '{relativePath}': {ex.Message}");
+                        }
+
+                        if (processed % 50 == 0 || processed == totalFiles)
+                        {
+                            progress?.Report($"Backing up files ({processed}/{totalFiles} scanned, {added} archived)...");
+                        }
+                    }
+
+                    if (skippedLogs > 0)
+                    {
+                        progress?.Report($"[BACKUP] Excluded {skippedLogs} log file(s) from backup to prevent lock conflicts.");
+                    }
+                }
+
                 progress?.Report("Backup zip created successfully.");
             }, cancellationToken);
+        }
+
+        private static bool IsLogFile(string relativePath)
+        {
+            string norm = relativePath.Replace('\\', '/');
+            string fileName = Path.GetFileName(norm);
+
+            // 1. Files in any logs directory
+            if (norm.StartsWith("logs/", StringComparison.OrdinalIgnoreCase) ||
+                norm.Contains("/logs/", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // 2. Any file ending with .log or starting with common log prefixes or having .log. in name
+            if (fileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Contains(".log.", StringComparison.OrdinalIgnoreCase) ||
+                fileName.StartsWith("access.log", StringComparison.OrdinalIgnoreCase) ||
+                fileName.StartsWith("error.log", StringComparison.OrdinalIgnoreCase) ||
+                fileName.StartsWith("ssl_request.log", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         public string FindApacheRoot(string extractedDirectory)

@@ -105,19 +105,34 @@ namespace XamppUpdate.Tests
         }
 
         [Fact]
-        public async Task ArchiveService_CreateZipBackup_CreatesValidZip()
+        public async Task ArchiveService_CreateZipBackup_CreatesValidZipAndExcludesLogs()
         {
-            string sourceFolder = Path.Combine(_testTempDir, "mock_apache");
-            Directory.CreateDirectory(sourceFolder);
-            File.WriteAllText(Path.Combine(sourceFolder, "test.txt"), "hello backup");
+            string sourceFolder = Path.Combine(_testTempDir, "mock_apache_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(sourceFolder, "bin"));
+            Directory.CreateDirectory(Path.Combine(sourceFolder, "conf"));
+            Directory.CreateDirectory(Path.Combine(sourceFolder, "logs"));
 
-            string backupZip = Path.Combine(_testTempDir, "backup.zip");
+            File.WriteAllText(Path.Combine(sourceFolder, "bin", "httpd.exe"), "hello binary");
+            File.WriteAllText(Path.Combine(sourceFolder, "conf", "httpd.conf"), "ServerRoot \"C:/xampp/apache\"");
+            File.WriteAllText(Path.Combine(sourceFolder, "logs", "access.log"), "127.0.0.1 - - [29/Aug/2026] GET /");
+            File.WriteAllText(Path.Combine(sourceFolder, "logs", "error.log"), "[crit] server error");
+            File.WriteAllText(Path.Combine(sourceFolder, "access.log.2026-08-29"), "archived log");
+
+            string backupZip = Path.Combine(_testTempDir, "backup_" + Guid.NewGuid().ToString("N") + ".zip");
 
             var archiveService = new ArchiveService();
             await archiveService.CreateZipBackupAsync(sourceFolder, backupZip);
 
             Assert.True(File.Exists(backupZip));
             Assert.True(new FileInfo(backupZip).Length > 0);
+
+            using var zip = System.IO.Compression.ZipFile.OpenRead(backupZip);
+            var entryKeys = zip.Entries.Select(e => e.FullName.Replace('\\', '/')).ToList();
+
+            Assert.Contains(entryKeys, k => k.Contains("httpd.exe"));
+            Assert.Contains(entryKeys, k => k.Contains("httpd.conf"));
+            Assert.DoesNotContain(entryKeys, k => k.Contains("access.log"));
+            Assert.DoesNotContain(entryKeys, k => k.Contains("error.log"));
         }
 
         [Fact]
