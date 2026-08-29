@@ -93,14 +93,6 @@ namespace XamppUpdate.Views.Controls
             CopyToClipboard(DiffItem.IncomingContent, "✓ Copied incoming config to clipboard");
         }
 
-        private void BtnCopyLocalLine_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.DataContext is DiffRowModel row && !string.IsNullOrEmpty(row.Local.Text))
-            {
-                CopyToClipboard(row.Local.Text, "✓ Copied local line to clipboard");
-            }
-        }
-
         private void BtnCopyIncomingLine_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.DataContext is DiffRowModel row && !string.IsNullOrEmpty(row.Incoming.Text))

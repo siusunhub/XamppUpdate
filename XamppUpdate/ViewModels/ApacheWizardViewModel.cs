@@ -312,7 +312,7 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
-        public async Task ReTestSimulationAsync()
+        public async Task RunTestModeSimulationAsync()
         {
             IsTestMode = true;
             IsCompleted = false;
@@ -322,13 +322,25 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
-        public async Task ExecuteRealUpdateAfterTestAsync()
+        public async Task ExecuteRealUpdateAsync()
         {
             IsTestMode = false;
             IsCompleted = false;
             IsTestCompleted = false;
             IsSuccess = false;
             await ExecuteUpdatePipelineAsync();
+        }
+
+        [RelayCommand]
+        public async Task ReTestSimulationAsync()
+        {
+            await RunTestModeSimulationAsync();
+        }
+
+        [RelayCommand]
+        public async Task ExecuteRealUpdateAfterTestAsync()
+        {
+            await ExecuteRealUpdateAsync();
         }
 
         [RelayCommand]

@@ -207,7 +207,6 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="38" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <!-- Line Number -->
                                 <Border Grid.Column="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0" Padding="0,2,4,2">
@@ -231,18 +230,6 @@
                                          Padding="4,2"
                                          VerticalAlignment="Center"
                                          SelectionBrush="#0284C7" />
-                                <!-- Quick Copy Button -->
-                                <Button Grid.Column="2"
-                                        Content="📋"
-                                        Click="BtnCopyLocalLine_Click"
-                                        ToolTip="Copy local line"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Cursor="Hand"
-                                        FontSize="10"
-                                        Padding="4,2"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding Local.HasText, Converter={StaticResource BoolToVisConverter}}" />
                             </Grid>
 
                             <!-- Center Divider -->
