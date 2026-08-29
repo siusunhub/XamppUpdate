@@ -144,5 +144,70 @@ namespace XamppUpdate.Tests
             Assert.Contains("0.1", AppInfo.WindowTitle);
             Assert.Contains("Build", AppInfo.WindowTitle);
         }
+
+        [Fact]
+        public async Task ApacheUpdateService_TestMode_SimulatesAndHoldsWorkspace()
+        {
+            string localApache = Path.Combine(_testTempDir, "local_apache");
+            Directory.CreateDirectory(Path.Combine(localApache, "bin"));
+            Directory.CreateDirectory(Path.Combine(localApache, "conf"));
+            await File.WriteAllTextAsync(Path.Combine(localApache, "bin", "httpd.exe"), "local httpd");
+            await File.WriteAllTextAsync(Path.Combine(localApache, "conf", "httpd.conf"), "ServerRoot \"C:/xampp/apache\"\nListen 80\n");
+
+            string incomingApache = Path.Combine(_testTempDir, "incoming_apache");
+            Directory.CreateDirectory(Path.Combine(incomingApache, "bin"));
+            Directory.CreateDirectory(Path.Combine(incomingApache, "conf"));
+            Directory.CreateDirectory(Path.Combine(incomingApache, "modules"));
+            await File.WriteAllTextAsync(Path.Combine(incomingApache, "bin", "httpd.exe"), "incoming new httpd");
+            await File.WriteAllTextAsync(Path.Combine(incomingApache, "conf", "httpd.conf"), "ServerRoot \"C:/xampp/apache\"\nListen 8080\n");
+            await File.WriteAllTextAsync(Path.Combine(incomingApache, "modules", "mod_test.so"), "new module binary");
+
+            string configPath = Path.Combine(_testTempDir, "test_config.json");
+            var settingsService = new SettingsService(configPath);
+            var settings = settingsService.LoadSettings();
+            settings.Apache.InstallationPath = localApache;
+            settings.Apache.ServiceName = "TestServiceNonExistent_" + Guid.NewGuid().ToString("N");
+            settings.General.BackupDirectory = Path.Combine(_testTempDir, "backups");
+            await settingsService.SaveSettingsAsync(settings);
+
+            var diffService = new ConfigDiffService();
+            var diff = await diffService.CompareSingleFileAsync(
+                Path.Combine(localApache, "conf", "httpd.conf"),
+                Path.Combine(incomingApache, "conf", "httpd.conf"),
+                "conf/httpd.conf");
+            diff.Resolution = ConfigFileResolution.KeepCurrent;
+
+            var updateService = new ApacheUpdateService(
+                settingsService,
+                new WindowsServiceManager(),
+                new VersionDetectionService(),
+                new ArchiveService(),
+                diffService);
+
+            var logs = new List<string>();
+            var progress = new Progress<UpdateProgressReport>(r => logs.Add(r.Message));
+
+            bool result = await updateService.ExecuteUpdatePipelineAsync(
+                incomingApache,
+                new List<ConfigDiffItem> { diff },
+                isTestMode: true,
+                progress: progress);
+
+            Assert.True(result);
+
+            // Verify live files were NOT overwritten (Test Mode protection)
+            Assert.Equal("local httpd", await File.ReadAllTextAsync(Path.Combine(localApache, "bin", "httpd.exe")));
+            Assert.Contains("Listen 80\n", await File.ReadAllTextAsync(Path.Combine(localApache, "conf", "httpd.conf")));
+            Assert.False(File.Exists(Path.Combine(localApache, "modules", "mod_test.so")));
+
+            // Verify workspace was HELD (not deleted)
+            Assert.True(Directory.Exists(incomingApache));
+            Assert.True(File.Exists(Path.Combine(incomingApache, "bin", "httpd.exe")));
+
+            // Verify simulation logs were generated
+            Assert.Contains(logs, m => m.Contains("[SIMULATE COPY]"));
+            Assert.Contains(logs, m => m.Contains("[SIMULATE SKIP]"));
+            Assert.Contains(logs, m => m.Contains("[TEST MODE]"));
+        }
     }
 }

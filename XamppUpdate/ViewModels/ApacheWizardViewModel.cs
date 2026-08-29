@@ -50,6 +50,12 @@ namespace XamppUpdate.ViewModels
         private bool _isCompleted;
 
         [ObservableProperty]
+        private bool _isTestMode;
+
+        [ObservableProperty]
+        private bool _isTestCompleted;
+
+        [ObservableProperty]
         private bool _isSuccess;
 
         [ObservableProperty]
@@ -195,13 +201,15 @@ namespace XamppUpdate.ViewModels
         {
             CurrentStepIndex = 2;
             ErrorMessage = string.Empty;
+            IsCompleted = false;
+            IsTestCompleted = false;
             StatusMessage = "Ready to apply update.";
         }
 
         [RelayCommand]
         public void GoBackToStep2()
         {
-            if (IsExecuting || IsCompleted) return;
+            if (IsExecuting || (IsCompleted && !IsTestCompleted)) return;
             CurrentStepIndex = 1;
             ErrorMessage = string.Empty;
         }
@@ -209,11 +217,12 @@ namespace XamppUpdate.ViewModels
         [RelayCommand]
         public async Task ExecuteUpdatePipelineAsync()
         {
-            if (IsExecuting || IsCompleted) return;
+            if (IsExecuting) return;
 
             IsExecuting = true;
             IsBusy = true;
             IsCompleted = false;
+            IsTestCompleted = false;
             IsSuccess = false;
             ErrorMessage = string.Empty;
             ExecutionLogs.Clear();
@@ -239,28 +248,36 @@ namespace XamppUpdate.ViewModels
             try
             {
                 var diffList = new System.Collections.Generic.List<ConfigDiffItem>(DiffItems);
-                bool success = await _updateService.ExecuteUpdatePipelineAsync(PreparedIncomingRoot, diffList, progress, _cts.Token);
+                bool success = await _updateService.ExecuteUpdatePipelineAsync(PreparedIncomingRoot, diffList, IsTestMode, progress, _cts.Token);
 
                 IsSuccess = success;
                 IsCompleted = true;
 
                 if (success)
                 {
-                    await LoadCurrentVersionAsync();
-                    StatusMessage = "Apache updated successfully!";
+                    if (IsTestMode)
+                    {
+                        IsTestCompleted = true;
+                        StatusMessage = "Test simulation completed successfully! Ready to re-test or execute real update.";
+                    }
+                    else
+                    {
+                        await LoadCurrentVersionAsync();
+                        StatusMessage = "Apache updated successfully!";
+                    }
                 }
                 else
                 {
-                    StatusMessage = "Update process encountered errors.";
+                    StatusMessage = "Process encountered errors.";
                 }
             }
             catch (Exception ex)
             {
                 IsSuccess = false;
                 IsCompleted = true;
-                ErrorMessage = $"Update pipeline exception: {ex.Message}";
+                ErrorMessage = $"Pipeline exception: {ex.Message}";
                 ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] FATAL ERROR: {ex.Message}");
-                StatusMessage = "Update aborted due to an error.";
+                StatusMessage = "Process aborted due to an error.";
             }
             finally
             {
@@ -268,6 +285,26 @@ namespace XamppUpdate.ViewModels
                 IsBusy = false;
                 IsIndeterminateProgress = false;
             }
+        }
+
+        [RelayCommand]
+        public async Task ReTestSimulationAsync()
+        {
+            IsTestMode = true;
+            IsCompleted = false;
+            IsTestCompleted = false;
+            IsSuccess = false;
+            await ExecuteUpdatePipelineAsync();
+        }
+
+        [RelayCommand]
+        public async Task ExecuteRealUpdateAfterTestAsync()
+        {
+            IsTestMode = false;
+            IsCompleted = false;
+            IsTestCompleted = false;
+            IsSuccess = false;
+            await ExecuteUpdatePipelineAsync();
         }
 
         [RelayCommand]

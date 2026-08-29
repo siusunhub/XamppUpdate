@@ -17,6 +17,7 @@ namespace XamppUpdate.Services
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
+        private static readonly SemaphoreSlim _fileLock = new(1, 1);
         private readonly string _configFilePath;
         private AppSettings _currentSettings;
 
@@ -58,7 +59,7 @@ namespace XamppUpdate.Services
                         if (settings != null)
                         {
                             _currentSettings = settings;
-                            _ = SaveSettingsAsync(_currentSettings);
+                            SaveSettingsSync(_currentSettings);
                             return _currentSettings;
                         }
                     }
@@ -70,12 +71,40 @@ namespace XamppUpdate.Services
             }
 
             _currentSettings = new AppSettings();
-            _ = SaveSettingsAsync(_currentSettings);
+            SaveSettingsSync(_currentSettings);
             return _currentSettings;
+        }
+
+        private void SaveSettingsSync(AppSettings settings)
+        {
+            try
+            {
+                _fileLock.Wait();
+                try
+                {
+                    string? directory = Path.GetDirectoryName(_configFilePath);
+                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                    }
+
+                    string json = JsonSerializer.Serialize(settings, JsonOptions);
+                    File.WriteAllText(_configFilePath, json, Encoding.UTF8);
+                }
+                finally
+                {
+                    _fileLock.Release();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to save initial settings: {ex.Message}");
+            }
         }
 
         public async Task SaveSettingsAsync(AppSettings settings)
         {
+            await _fileLock.WaitAsync();
             try
             {
                 string? directory = Path.GetDirectoryName(_configFilePath);
@@ -92,6 +121,10 @@ namespace XamppUpdate.Services
             catch (Exception ex)
             {
                 throw new InvalidOperationException($"Could not save configuration to '{_configFilePath}': {ex.Message}", ex);
+            }
+            finally
+            {
+                _fileLock.Release();
             }
         }
 

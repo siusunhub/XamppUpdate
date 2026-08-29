@@ -139,6 +139,7 @@ namespace XamppUpdate.Services
         public async Task<bool> ExecuteUpdatePipelineAsync(
             string incomingApacheRoot,
             List<ConfigDiffItem> resolvedConfigs,
+            bool isTestMode = false,
             IProgress<UpdateProgressReport>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -146,6 +147,7 @@ namespace XamppUpdate.Services
             string localApacheRoot = settings.Apache.InstallationPath;
             string serviceName = settings.Apache.ServiceName;
             string backupDir = settings.General.ResolvedBackupDirectory;
+            string modeTag = isTestMode ? "[TEST MODE] " : string.Empty;
 
             if (!Directory.Exists(localApacheRoot))
             {
@@ -168,12 +170,12 @@ namespace XamppUpdate.Services
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string backupZipPath = Path.Combine(backupDir, $"apache_{currentVersion}_{timestamp}.zip");
 
-            // Step 1: Backup
+            // Step 1: Backup (Real in both modes)
             progress?.Report(new UpdateProgressReport
             {
                 Step = UpdateStep.BackupCreation,
-                StepTitle = "Creating Full Backup",
-                Message = $"Backing up active Apache directory to {Path.GetFileName(backupZipPath)}...",
+                StepTitle = $"{modeTag}Creating Full Backup",
+                Message = $"{modeTag}Backing up active Apache directory to {Path.GetFileName(backupZipPath)}...",
                 Percentage = 15,
                 IsIndeterminate = true
             });
@@ -183,8 +185,8 @@ namespace XamppUpdate.Services
                 progress?.Report(new UpdateProgressReport
                 {
                     Step = UpdateStep.BackupCreation,
-                    StepTitle = "Creating Full Backup",
-                    Message = msg,
+                    StepTitle = $"{modeTag}Creating Full Backup",
+                    Message = $"{modeTag}{msg}",
                     Percentage = 20,
                     IsIndeterminate = true
                 });
@@ -193,51 +195,87 @@ namespace XamppUpdate.Services
             await _archiveService.CreateZipBackupAsync(localApacheRoot, backupZipPath, backupProgress, cancellationToken);
             EnforceBackupRetention(backupDir, settings.General.MaxBackupRetentionCount);
 
-            // Step 2: Stop Service
-            progress?.Report(new UpdateProgressReport
+            if (isTestMode)
             {
-                Step = UpdateStep.ServiceStop,
-                StepTitle = "Stopping Windows Service",
-                Message = $"Sending stop request to '{serviceName}'...",
-                Percentage = 30
-            });
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.BackupCreation,
+                    StepTitle = "[TEST MODE] Backup Verified",
+                    Message = $"[TEST MODE] Successfully tested zip backup: {Path.GetFileName(backupZipPath)} created.",
+                    Percentage = 25
+                });
+            }
 
-            var serviceStopProgress = new Progress<string>(msg =>
+            bool serviceExists = _serviceManager.ServiceExists(serviceName);
+
+            // Step 2: Stop Service (Real in both modes if installed)
+            if (serviceExists)
             {
                 progress?.Report(new UpdateProgressReport
                 {
                     Step = UpdateStep.ServiceStop,
-                    StepTitle = "Stopping Windows Service",
-                    Message = msg,
-                    Percentage = 35
+                    StepTitle = $"{modeTag}Stopping Windows Service",
+                    Message = $"{modeTag}Sending stop request to '{serviceName}'...",
+                    Percentage = 30
                 });
-            });
 
-            bool stopped = await _serviceManager.StopServiceAsync(serviceName, TimeSpan.FromSeconds(30), serviceStopProgress);
-            if (!stopped)
+                var serviceStopProgress = new Progress<string>(msg =>
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStop,
+                        StepTitle = $"{modeTag}Stopping Windows Service",
+                        Message = $"{modeTag}{msg}",
+                        Percentage = 35
+                    });
+                });
+
+                bool stopped = await _serviceManager.StopServiceAsync(serviceName, TimeSpan.FromSeconds(30), serviceStopProgress);
+                if (!stopped)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.Failed,
+                        StepTitle = "Service Stop Failed",
+                        Message = $"Could not stop service '{serviceName}'. Aborting to avoid corruption.",
+                        IsError = true
+                    });
+                    return false;
+                }
+
+                if (isTestMode)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStop,
+                        StepTitle = "[TEST MODE] Service Stop Verified",
+                        Message = $"[TEST MODE] Successfully tested stopping Windows service '{serviceName}'.",
+                        Percentage = 40
+                    });
+                }
+            }
+            else
             {
                 progress?.Report(new UpdateProgressReport
                 {
-                    Step = UpdateStep.Failed,
-                    StepTitle = "Service Stop Failed",
-                    Message = $"Could not stop service '{serviceName}'. Aborting update to avoid corruption.",
-                    IsError = true
+                    Step = UpdateStep.ServiceStop,
+                    StepTitle = $"{modeTag}Service Check",
+                    Message = $"{modeTag}Service '{serviceName}' is not installed as a Windows Service. Skipping stop.",
+                    Percentage = 40
                 });
-                return false;
             }
 
             try
             {
-                // Step 3: Copy new files, handling preserved configurations
+                // Step 3: Copy new files (Simulated if isTestMode, real if not)
                 progress?.Report(new UpdateProgressReport
                 {
                     Step = UpdateStep.FileReplacement,
-                    StepTitle = "Updating Apache Binaries & Modules",
-                    Message = "Copying updated files into Apache directory...",
+                    StepTitle = isTestMode ? "[TEST MODE] Simulating File Copy" : "Updating Apache Binaries & Modules",
+                    Message = isTestMode ? "Simulating file replacement (no live files modified)..." : "Copying updated files into Apache directory...",
                     Percentage = 50
                 });
 
-                // Build set of preserved config relative paths (normalized)
                 var preservedRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var customMergedConfigs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -254,10 +292,38 @@ namespace XamppUpdate.Services
                     }
                 }
 
-                await CopyDirectoryAsync(incomingApacheRoot, localApacheRoot, preservedRelativePaths, cancellationToken);
+                if (isTestMode)
+                {
+                    await SimulateCopyDirectoryAsync(incomingApacheRoot, localApacheRoot, preservedRelativePaths, progress, cancellationToken);
+                }
+                else
+                {
+                    await CopyDirectoryAsync(incomingApacheRoot, localApacheRoot, preservedRelativePaths, cancellationToken);
+                }
 
-                // Step 4: Write merged configurations if any
-                if (customMergedConfigs.Count > 0)
+                // Step 4: Config resolution reporting and application
+                foreach (var diff in resolvedConfigs)
+                {
+                    string norm = NormalizeRelativePath(diff.RelativeFilePath);
+                    string resolutionDesc = diff.Resolution switch
+                    {
+                        ConfigFileResolution.KeepCurrent => "[CONFIG] Preserve current working file (skip overwrite)",
+                        ConfigFileResolution.OverwriteWithNew => "[CONFIG] Overwrite with incoming new default",
+                        ConfigFileResolution.UseMerged => $"[CONFIG] Apply custom merged edits ({diff.MergedContent.Length} chars)",
+                        _ => "[CONFIG] Default"
+                    };
+
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ConfigApplication,
+                        StepTitle = isTestMode ? "[TEST MODE] Config Resolution" : "Applying Config Resolution",
+                        Message = $"{resolutionDesc}: {norm}",
+                        Percentage = 72
+                    });
+                }
+
+                // Write merged configurations to disk ONLY in live mode
+                if (!isTestMode && customMergedConfigs.Count > 0)
                 {
                     progress?.Report(new UpdateProgressReport
                     {
@@ -279,40 +345,86 @@ namespace XamppUpdate.Services
                     }
                 }
 
-                // Step 5: Start Service
-                progress?.Report(new UpdateProgressReport
-                {
-                    Step = UpdateStep.ServiceStart,
-                    StepTitle = "Starting Windows Service",
-                    Message = $"Starting service '{serviceName}'...",
-                    Percentage = 85
-                });
-
-                var serviceStartProgress = new Progress<string>(msg =>
+                // Step 5: Start Service (Real in both modes if installed)
+                if (serviceExists)
                 {
                     progress?.Report(new UpdateProgressReport
                     {
                         Step = UpdateStep.ServiceStart,
-                        StepTitle = "Starting Windows Service",
-                        Message = msg,
-                        Percentage = 90
+                        StepTitle = $"{modeTag}Starting Windows Service",
+                        Message = $"{modeTag}Starting service '{serviceName}'...",
+                        Percentage = 85
                     });
-                });
 
-                bool started = await _serviceManager.StartServiceAsync(serviceName, TimeSpan.FromSeconds(30), serviceStartProgress);
-                if (!started)
+                    var serviceStartProgress = new Progress<string>(msg =>
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.ServiceStart,
+                            StepTitle = $"{modeTag}Starting Windows Service",
+                            Message = $"{modeTag}{msg}",
+                            Percentage = 90
+                        });
+                    });
+
+                    bool started = await _serviceManager.StartServiceAsync(serviceName, TimeSpan.FromSeconds(30), serviceStartProgress);
+                    if (!started)
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Failed,
+                            StepTitle = "Service Start Failed",
+                            Message = $"Service '{serviceName}' failed to start. Backup is available at {backupZipPath}.",
+                            IsError = true
+                        });
+                        return false;
+                    }
+
+                    if (isTestMode)
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.ServiceStart,
+                            StepTitle = "[TEST MODE] Service Start Verified",
+                            Message = $"[TEST MODE] Successfully tested starting Windows service '{serviceName}'.",
+                            Percentage = 92
+                        });
+                    }
+                }
+                else
                 {
                     progress?.Report(new UpdateProgressReport
                     {
-                        Step = UpdateStep.Failed,
-                        StepTitle = "Service Start Failed",
-                        Message = $"Service '{serviceName}' failed to start after update. Backup is available at {backupZipPath}.",
-                        IsError = true
+                        Step = UpdateStep.ServiceStart,
+                        StepTitle = $"{modeTag}Service Check",
+                        Message = $"{modeTag}Service '{serviceName}' is not installed as a Windows Service. Skipping start.",
+                        Percentage = 90
                     });
-                    return false;
                 }
 
-                // Step 6: Verify health & Cleanup
+                if (isTestMode)
+                {
+                    // Step 6 (TEST MODE): Hold workspace
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.Cleanup,
+                        StepTitle = "[TEST MODE] Holding Workspace",
+                        Message = $"[TEST MODE] Clean up workspace HELD! Prepared files kept in '{incomingApacheRoot}' for immediate re-test or real execution.",
+                        Percentage = 95
+                    });
+
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.Complete,
+                        StepTitle = "Test Mode Simulation Complete",
+                        Message = "[TEST COMPLETE] All tests passed! Zip backup created, service verified, copy and config merges simulated. Ready to re-test or execute real update.",
+                        Percentage = 100
+                    });
+
+                    return true;
+                }
+
+                // Step 6 (LIVE MODE): Cleanup and Complete
                 progress?.Report(new UpdateProgressReport
                 {
                     Step = UpdateStep.Cleanup,
@@ -350,11 +462,73 @@ namespace XamppUpdate.Services
                 {
                     Step = UpdateStep.Failed,
                     StepTitle = "Update Pipeline Error",
-                    Message = $"An error occurred during file replacement: {ex.Message}. A full backup was saved to '{backupZipPath}'.",
+                    Message = $"An error occurred during update pipeline: {ex.Message}. Backup is saved at '{backupZipPath}'.",
                     IsError = true
                 });
                 return false;
             }
+        }
+
+        private static async Task SimulateCopyDirectoryAsync(
+            string sourceDir,
+            string destinationDir,
+            HashSet<string> preservedRelativePaths,
+            IProgress<UpdateProgressReport>? progress,
+            CancellationToken cancellationToken)
+        {
+            var dir = new DirectoryInfo(sourceDir);
+            if (!dir.Exists) return;
+
+            var allFiles = dir.GetFiles("*", SearchOption.AllDirectories);
+            int total = allFiles.Length;
+            int copiedCount = 0;
+            int skippedCount = 0;
+
+            for (int i = 0; i < total; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var file = allFiles[i];
+
+                string relativePath = Path.GetRelativePath(sourceDir, file.FullName);
+                string normRelative = NormalizeRelativePath(relativePath);
+                string destFile = Path.Combine(destinationDir, relativePath);
+
+                if (preservedRelativePaths.Contains(normRelative) && File.Exists(destFile))
+                {
+                    skippedCount++;
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.FileReplacement,
+                        StepTitle = "Simulate File Copy",
+                        Message = $"[SIMULATE SKIP] {normRelative} -> Preserving existing working file",
+                        Percentage = 50 + (int)(18.0 * (i + 1) / total)
+                    });
+                }
+                else
+                {
+                    copiedCount++;
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.FileReplacement,
+                        StepTitle = "Simulate File Copy",
+                        Message = $"[SIMULATE COPY] {file.FullName} -> {destFile}",
+                        Percentage = 50 + (int)(18.0 * (i + 1) / total)
+                    });
+                }
+
+                if (i % 20 == 0)
+                {
+                    await Task.Delay(5, cancellationToken);
+                }
+            }
+
+            progress?.Report(new UpdateProgressReport
+            {
+                Step = UpdateStep.FileReplacement,
+                StepTitle = "Simulation Summary",
+                Message = $"[SIMULATE SUMMARY] Total {total} files checked: {copiedCount} would be replaced/copied, {skippedCount} preserved.",
+                Percentage = 68
+            });
         }
 
         public void CleanupTempDirectory(string tempDirectoryPath)

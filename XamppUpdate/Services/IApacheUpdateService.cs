@@ -13,6 +13,7 @@ namespace XamppUpdate.Services
         Task<bool> ExecuteUpdatePipelineAsync(
             string incomingApacheRoot,
             List<ConfigDiffItem> resolvedConfigs,
+            bool isTestMode = false,
             IProgress<UpdateProgressReport>? progress = null,
             CancellationToken cancellationToken = default);
         void CleanupTempDirectory(string tempDirectoryPath);

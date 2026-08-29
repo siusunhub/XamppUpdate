@@ -377,6 +377,28 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Test Mode Configuration Card -->
+                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,12">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <CheckBox IsChecked="{Binding IsTestMode, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsExecuting, Converter={StaticResource InverseBoolConverter}}"
+                                      Content="🧪 Test Mode (Dry-Run Simulation)"
+                                      FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="Simulates update pipeline: tests zip backup creation, tests stopping/starting the real Windows service, simulates file copies (source -> destination) and config merges without modifying live files, and holds workspace for subsequent real execution or re-test."
+                                       FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="24,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="#FEF3C7" BorderBrush="#FDE68A" BorderThickness="1" CornerRadius="6" Padding="8,4" VerticalAlignment="Center"
+                                Visibility="{Binding IsTestMode, Converter={StaticResource BoolToVisConverter}}">
+                            <TextBlock Text="TEST MODE ACTIVE" FontSize="11" FontWeight="Bold" Foreground="#B45309" />
+                        </Border>
+                    </Grid>
+                </Border>
+
                 <!-- Live Progress & Execution Log Console -->
                 <Border Grid.Row="1" Style="{StaticResource CardBorderStyle}" Padding="16">
                     <Grid>
@@ -436,7 +458,12 @@
                     <Border Grid.Column="1" Background="#DCFCE7" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="8" Padding="12,6" Margin="16,0"
                             Visibility="{Binding IsSuccess, Converter={StaticResource BoolToVisConverter}}">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="🎉 Apache Update Succeeded!" FontWeight="Bold" Foreground="#15803D" FontSize="13" />
+                            <TextBlock Text="🧪 Test Mode Simulation Completed! Ready to re-test or execute real update."
+                                       FontWeight="Bold" Foreground="#15803D" FontSize="12.5"
+                                       Visibility="{Binding IsTestCompleted, Converter={StaticResource BoolToVisConverter}}" />
+                            <TextBlock Text="🎉 Apache Update Succeeded! Windows service is running."
+                                       FontWeight="Bold" Foreground="#15803D" FontSize="12.5"
+                                       Visibility="{Binding IsTestCompleted, Converter={StaticResource InverseBoolToVisConverter}}" />
                         </StackPanel>
                     </Border>
 
@@ -447,20 +474,43 @@
                     </Border>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <!-- Start Execution Button -->
-                        <Button Style="{StaticResource SuccessButtonStyle}"
-                                Content="🚀 Execute Update Now"
-                                Command="{Binding ExecuteUpdatePipelineCommand}"
+                        <!-- Initial Execution Button: When NOT completed yet -->
+                        <Button Command="{Binding ExecuteUpdatePipelineCommand}"
                                 Visibility="{Binding IsCompleted, Converter={StaticResource InverseBoolToVisConverter}}"
                                 IsEnabled="{Binding IsExecuting, Converter={StaticResource InverseBoolConverter}}"
-                                Padding="20,10" FontSize="13.5" />
+                                Padding="20,10" FontSize="13.5">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SuccessButtonStyle}">
+                                    <Setter Property="Content" Value="🚀 Execute Real Update Now" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsTestMode}" Value="True">
+                                            <Setter Property="Content" Value="🧪 Run Test Mode Simulation" />
+                                            <Setter Property="Background" Value="{StaticResource PrimaryAccentBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
 
-                        <!-- Finish Button -->
+                        <!-- After Test Mode Completed: Can Re-test or Real Start Exec -->
+                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                Content="🔄 Re-Test Simulation"
+                                Command="{Binding ReTestSimulationCommand}"
+                                Visibility="{Binding IsTestCompleted, Converter={StaticResource BoolToVisConverter}}"
+                                Padding="16,10" Margin="0,0,10,0" FontSize="13" />
+
+                        <Button Style="{StaticResource SuccessButtonStyle}"
+                                Content="🚀 Execute Real Update Now"
+                                Command="{Binding ExecuteRealUpdateAfterTestCommand}"
+                                Visibility="{Binding IsTestCompleted, Converter={StaticResource BoolToVisConverter}}"
+                                Padding="18,10" Margin="0,0,10,0" FontSize="13" />
+
+                        <!-- Finish / Done Button -->
                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                 Content="Done &amp; Close"
                                 Command="{Binding CancelOrCloseCommand}"
                                 Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisConverter}}"
-                                Padding="22,10" FontSize="13.5" />
+                                Padding="20,10" FontSize="13.5" />
                     </StackPanel>
                 </Grid>
             </Grid>
