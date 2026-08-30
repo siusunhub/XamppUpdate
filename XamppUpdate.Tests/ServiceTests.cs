@@ -491,5 +491,38 @@ namespace XamppUpdate.Tests
             Assert.Equal("memory_limit = 512M\n", await File.ReadAllTextAsync(Path.Combine(localPhp, "php.ini")));
             Assert.Contains(logs, l => l.Contains("[TEST MODE]"));
         }
+
+        [Fact]
+        public async Task VersionDetectionService_DetectPhpBuildInfo_DetectsThreadSafetyAndArchitecture()
+        {
+            string phpDir = Path.Combine(_testTempDir, "php_build_test_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(phpDir);
+
+            // Create dummy php.exe with PE header machine = 0x8664 (x64)
+            byte[] dummyPe = new byte[512];
+            dummyPe[0] = (byte)'M';
+            dummyPe[1] = (byte)'Z';
+            dummyPe[0x3C] = 0x80; // PE offset at 0x80
+            dummyPe[0x80] = (byte)'P';
+            dummyPe[0x81] = (byte)'E';
+            dummyPe[0x82] = 0;
+            dummyPe[0x83] = 0;
+            dummyPe[0x84] = 0x64; // 0x8664 (x64 machine type)
+            dummyPe[0x85] = 0x86;
+            await File.WriteAllBytesAsync(Path.Combine(phpDir, "php.exe"), dummyPe);
+
+            // Add php8ts.dll
+            await File.WriteAllTextAsync(Path.Combine(phpDir, "php8ts.dll"), "dummy dll");
+
+            var versionService = new VersionDetectionService();
+            var info = await versionService.DetectPhpBuildInfoAsync(phpDir);
+
+            Assert.NotNull(info);
+            Assert.Equal("x64", info.Architecture);
+            Assert.True(info.IsThreadSafe);
+            Assert.Contains("Thread Safe", info.ThreadSafetyDisplay);
+            Assert.Contains("64-bit", info.ArchitectureDisplay);
+            Assert.True(info.IsApacheCompatible);
+        }
     }
 }

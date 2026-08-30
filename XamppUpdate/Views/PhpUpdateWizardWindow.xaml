@@ -169,6 +169,28 @@
                                     </StackPanel>
                                 </StackPanel>
 
+                                <!-- Active Installed PHP Build Card -->
+                                <Border Background="{StaticResource SurfaceSubtleBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="Active Installed PHP Build:" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                <TextBlock Text="{Binding CurrentPhpBuild.Version, StringFormat='PHP {0}'}" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,10,0" />
+                                                <Border Background="#EEF2F6" CornerRadius="4" Padding="6,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="{Binding CurrentPhpBuild.ArchitectureDisplay}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                                                </Border>
+                                                <Border Background="#DCFCE7" CornerRadius="4" Padding="6,2">
+                                                    <TextBlock Text="{Binding CurrentPhpBuild.ThreadSafetyDisplay}" FontSize="11" FontWeight="Bold" Foreground="#15803D" />
+                                                </Border>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Source Path Input -->
                                 <TextBlock Text="Package File or Directory Path:" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,6" />
                                 <Grid Margin="0,0,0,16">
@@ -206,6 +228,16 @@
                                                 Command="{Binding OpenPhpDownloadUrlCommand}"
                                                 Padding="12,6" VerticalAlignment="Center" />
                                     </Grid>
+                                </Border>
+
+                                <!-- Apache Compatibility Warning (if NTS or incompatible) -->
+                                <Border Background="#FEF2F2" BorderBrush="#F87171" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,16"
+                                        Visibility="{Binding IsIncomingCompatibleWithApache, Converter={StaticResource InverseBoolToVisConverter}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⚠️ " FontSize="14" VerticalAlignment="Center" />
+                                        <TextBlock Text="WARNING: Selected PHP package is Non-Thread Safe (NTS). Apache on Windows requires Thread Safe (TS) PHP. Apache will fail to start if updated with NTS."
+                                                   FontWeight="Bold" Foreground="#B91C1C" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </StackPanel>
                                 </Border>
 
                                 <!-- Error Display -->

@@ -39,17 +39,28 @@ namespace XamppUpdate.ViewModels
         [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
         private string _incomingDetectedVersion = "Pending...";
 
+        [ObservableProperty]
+        private PhpBuildInfo? _currentPhpBuild;
+
+        [ObservableProperty]
+        private PhpBuildInfo? _incomingPhpBuild;
+
+        [ObservableProperty]
+        private bool _isIncomingCompatibleWithApache = true;
+
         public string VersionTransitionDisplay
         {
             get
             {
-                string fromVer = string.IsNullOrWhiteSpace(CurrentInstalledVersion) || CurrentInstalledVersion == "Detecting..."
-                    ? "Unknown"
-                    : CurrentInstalledVersion;
-                string toVer = string.IsNullOrWhiteSpace(IncomingDetectedVersion) || IncomingDetectedVersion == "Pending..."
-                    ? "Unknown"
-                    : IncomingDetectedVersion;
-                return $"Update from PHP {fromVer} to PHP {toVer}";
+                string fromVer = CurrentPhpBuild != null && !string.IsNullOrWhiteSpace(CurrentPhpBuild.Version) && CurrentPhpBuild.Version != "Unknown"
+                    ? $"PHP {CurrentPhpBuild.FullDisplayString}"
+                    : (string.IsNullOrWhiteSpace(CurrentInstalledVersion) || CurrentInstalledVersion == "Detecting..." ? "Unknown" : CurrentInstalledVersion);
+
+                string toVer = IncomingPhpBuild != null && !string.IsNullOrWhiteSpace(IncomingPhpBuild.Version) && IncomingPhpBuild.Version != "Unknown"
+                    ? $"PHP {IncomingPhpBuild.FullDisplayString}"
+                    : (string.IsNullOrWhiteSpace(IncomingDetectedVersion) || IncomingDetectedVersion == "Pending..." ? "Unknown" : IncomingDetectedVersion);
+
+                return $"Update from {fromVer} to {toVer}";
             }
         }
 
@@ -107,7 +118,8 @@ namespace XamppUpdate.ViewModels
         public async Task LoadCurrentVersionAsync()
         {
             var settings = _settingsService.CurrentSettings;
-            CurrentInstalledVersion = await _versionDetectionService.DetectPhpVersionAsync(settings.Php.InstallationPath);
+            CurrentPhpBuild = await _versionDetectionService.DetectPhpBuildInfoAsync(settings.Php.InstallationPath);
+            CurrentInstalledVersion = CurrentPhpBuild.FullDisplayString;
         }
 
         [RelayCommand]
@@ -184,7 +196,9 @@ namespace XamppUpdate.ViewModels
             try
             {
                 PreparedIncomingRoot = await _updateService.PrepareIncomingSourceAsync(SourcePathOrUrl, progress, _cts.Token);
-                IncomingDetectedVersion = await _versionDetectionService.DetectPhpVersionAsync(PreparedIncomingRoot);
+                IncomingPhpBuild = await _versionDetectionService.DetectPhpBuildInfoAsync(PreparedIncomingRoot);
+                IncomingDetectedVersion = IncomingPhpBuild.FullDisplayString;
+                IsIncomingCompatibleWithApache = IncomingPhpBuild.IsApacheCompatible;
 
                 // Load config diffs
                 StatusMessage = "Comparing PHP configuration files (php.ini)...";

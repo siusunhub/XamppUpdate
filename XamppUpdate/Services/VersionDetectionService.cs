@@ -1,8 +1,10 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using XamppUpdate.Models;
 
 namespace XamppUpdate.Services
 {
@@ -58,41 +60,137 @@ namespace XamppUpdate.Services
 
         public async Task<string> DetectPhpVersionAsync(string installationPath)
         {
+            var info = await DetectPhpBuildInfoAsync(installationPath);
+            return info.Version;
+        }
+
+        public async Task<PhpBuildInfo> DetectPhpBuildInfoAsync(string installationPath)
+        {
             return await Task.Run(() =>
             {
+                var buildInfo = new PhpBuildInfo();
+
                 if (string.IsNullOrWhiteSpace(installationPath) || !Directory.Exists(installationPath))
                 {
-                    return "Not Installed / Path Invalid";
+                    buildInfo.Version = "Not Installed / Path Invalid";
+                    return buildInfo;
                 }
 
                 string phpExe = Path.Combine(installationPath, "php.exe");
                 if (!File.Exists(phpExe))
                 {
-                    return "Executable Not Found";
+                    buildInfo.Version = "Executable Not Found";
+                    return buildInfo;
                 }
 
+                // 1. Static inspection from files and PE binary header
+                string detectedArch = "x64";
+                bool isThreadSafe = true;
+
+                // Check DLLs in root directory
+                try
+                {
+                    bool hasTsDll = Directory.EnumerateFiles(installationPath, "*ts.dll", SearchOption.TopDirectoryOnly).Any(f =>
+                    {
+                        string name = Path.GetFileName(f);
+                        return name.StartsWith("php", StringComparison.OrdinalIgnoreCase) && name.EndsWith("ts.dll", StringComparison.OrdinalIgnoreCase);
+                    });
+
+                    bool hasNonTsDll = Directory.EnumerateFiles(installationPath, "php*.dll", SearchOption.TopDirectoryOnly).Any(f =>
+                    {
+                        string name = Path.GetFileName(f);
+                        return !name.EndsWith("ts.dll", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(name, @"^php\d*\.dll$", RegexOptions.IgnoreCase);
+                    });
+
+                    if (hasTsDll) isThreadSafe = true;
+                    else if (hasNonTsDll) isThreadSafe = false;
+                }
+                catch { }
+
+                // Read PE header of php.exe
+                try
+                {
+                    using var fs = new FileStream(phpExe, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new BinaryReader(fs);
+
+                    if (fs.Length >= 64)
+                    {
+                        fs.Seek(0x3C, SeekOrigin.Begin);
+                        int peOffset = reader.ReadInt32();
+
+                        if (peOffset > 0 && fs.Length >= peOffset + 6)
+                        {
+                            fs.Seek(peOffset, SeekOrigin.Begin);
+                            uint peSignature = reader.ReadUInt32();
+                            if (peSignature == 0x00004550) // "PE\0\0"
+                            {
+                                ushort machine = reader.ReadUInt16();
+                                detectedArch = machine switch
+                                {
+                                    0x8664 => "x64",
+                                    0x014C => "x86",
+                                    0xAA64 => "ARM64",
+                                    _ => "x64"
+                                };
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                // 2. Dynamic execution: php.exe -v
                 try
                 {
                     string output = ExecuteProcess(phpExe, "-v");
-                    var match = Regex.Match(output, @"PHP\s+(\d+\.\d+\.\d+)");
-                    if (match.Success)
+                    buildInfo.RawOutput = output;
+
+                    var versionMatch = Regex.Match(output, @"PHP\s+(\d+\.\d+\.\d+)");
+                    if (versionMatch.Success)
                     {
-                        return match.Groups[1].Value;
+                        buildInfo.Version = versionMatch.Groups[1].Value;
+                    }
+
+                    if (output.Contains("ZTS", StringComparison.OrdinalIgnoreCase) ||
+                        output.Contains("TS", StringComparison.OrdinalIgnoreCase) ||
+                        output.Contains("Thread Safe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        isThreadSafe = true;
+                    }
+                    else if (output.Contains("NTS", StringComparison.OrdinalIgnoreCase) ||
+                             output.Contains("Non-Thread Safe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        isThreadSafe = false;
+                    }
+
+                    if (output.Contains("x64", StringComparison.OrdinalIgnoreCase))
+                    {
+                        detectedArch = "x64";
+                    }
+                    else if (output.Contains("x86", StringComparison.OrdinalIgnoreCase))
+                    {
+                        detectedArch = "x86";
                     }
                 }
                 catch { }
 
-                try
+                // 3. Fallback to FileVersionInfo if version still not detected
+                if (string.IsNullOrWhiteSpace(buildInfo.Version) || buildInfo.Version == "Unknown")
                 {
-                    var versionInfo = FileVersionInfo.GetVersionInfo(phpExe);
-                    if (!string.IsNullOrWhiteSpace(versionInfo.ProductVersion))
+                    try
                     {
-                        return versionInfo.ProductVersion.Trim();
+                        var versionInfo = FileVersionInfo.GetVersionInfo(phpExe);
+                        if (!string.IsNullOrWhiteSpace(versionInfo.ProductVersion))
+                        {
+                            buildInfo.Version = versionInfo.ProductVersion.Trim();
+                        }
                     }
+                    catch { }
                 }
-                catch { }
 
-                return "Unknown Version";
+                buildInfo.Architecture = detectedArch;
+                buildInfo.IsThreadSafe = isThreadSafe;
+
+                return buildInfo;
             });
         }
 

@@ -7,6 +7,7 @@ namespace XamppUpdate.Services
     {
         Task<string> DetectApacheVersionAsync(string installationPath);
         Task<string> DetectPhpVersionAsync(string installationPath);
+        Task<PhpBuildInfo> DetectPhpBuildInfoAsync(string installationPath);
         Task<string> DetectMySqlVersionAsync(string installationPath);
         Task<string> DetectComposerVersionAsync(string executablePath);
         Task<string> DetectSslStatusAsync(string certificatesPath);
