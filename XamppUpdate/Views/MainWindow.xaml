@@ -54,7 +54,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Actions: Refresh & Settings -->
+                <!-- Actions: Refresh, SSL & Settings -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Style="{StaticResource SecondaryButtonStyle}"
                             Command="{Binding RefreshStatusCommand}"
@@ -63,6 +63,16 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔄" Margin="0,0,6,0" />
                             <TextBlock Text="Refresh Status" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding OpenSslManagerCommand}"
+                            Padding="14,8" Margin="0,0,10,0"
+                            ToolTip="Inspect and update Apache SSL certificates">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔒" Margin="0,0,6,0" />
+                            <TextBlock Text="SSL Certificates" />
                         </StackPanel>
                     </Button>
 
@@ -90,8 +100,8 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="💡" FontSize="18" VerticalAlignment="Center" Margin="0,0,12,0" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="Apache Update Pipeline is fully operational." FontWeight="SemiBold" Foreground="#0369A1" FontSize="13" />
-                            <TextBlock Text="Safely update Apache binaries with automated backups, service control, and configuration diff inspection."
+                            <TextBlock Text="Apache Update Pipeline &amp; SSL Certificate Manager are ready." FontWeight="SemiBold" Foreground="#0369A1" FontSize="13" />
+                            <TextBlock Text="Safely update Apache binaries, inspect configuration diffs, and manage SSL certificates and keys."
                                        Foreground="#0284C7" FontSize="12" Margin="0,2,0,0" />
                         </StackPanel>
                     </Grid>
@@ -139,7 +149,15 @@
                                     </StackPanel>
 
                                     <!-- Action Button -->
-                                    <StackPanel Grid.Column="4" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <!-- Active Apache SSL Button -->
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="🔒 SSL Manager"
+                                                Visibility="{Binding CanUpdate, Converter={StaticResource BoolToVisConverter}}"
+                                                Command="{Binding DataContext.OpenSslManagerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                Padding="12,8" Margin="0,0,8,0"
+                                                ToolTip="Manage, inspect, and update Apache SSL certificates" />
+
                                         <!-- Active Apache Update Button -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                                 Content="Update Apache"

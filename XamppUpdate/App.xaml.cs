@@ -15,6 +15,7 @@ namespace XamppUpdate
         private IArchiveService? _archiveService;
         private IConfigDiffService? _configDiffService;
         private IApacheUpdateService? _apacheUpdateService;
+        private ISslCertificateService? _sslCertificateService;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -47,6 +48,7 @@ namespace XamppUpdate
             _versionDetectionService = new VersionDetectionService();
             _archiveService = new ArchiveService();
             _configDiffService = new ConfigDiffService();
+            _sslCertificateService = new SslCertificateService();
             _apacheUpdateService = new ApacheUpdateService(
                 _settingsService,
                 _serviceManager,
@@ -63,7 +65,8 @@ namespace XamppUpdate
             var mainWindow = new MainWindow(
                 mainViewModel,
                 () => new SettingsViewModel(_settingsService),
-                () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService));
+                () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService),
+                () => new SslManagerViewModel(_sslCertificateService, _settingsService));
 
             MainWindow = mainWindow;
             mainWindow.Show();

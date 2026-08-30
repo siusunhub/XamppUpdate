@@ -298,5 +298,104 @@ namespace XamppUpdate.Tests
             Assert.Contains(logs, m => m.Contains("[SIMULATE SKIP]"));
             Assert.Contains(logs, m => m.Contains("[TEST MODE]"));
         }
+
+        [Fact]
+        public async Task SslCertificateService_DetectsGlobalAndVirtualHostCertificates()
+        {
+            string apacheRoot = Path.Combine(_testTempDir, "mock_ssl_apache_" + Guid.NewGuid().ToString("N"));
+            string confDir = Path.Combine(apacheRoot, "conf");
+            string extraDir = Path.Combine(confDir, "extra");
+            string sslDir = Path.Combine(confDir, "ssl");
+
+            Directory.CreateDirectory(extraDir);
+            Directory.CreateDirectory(sslDir);
+
+            // Create dummy cert files
+            string defaultCert = Path.Combine(sslDir, "server.crt");
+            string defaultKey = Path.Combine(sslDir, "server.key");
+            string vhostCert = Path.Combine(sslDir, "api.crt");
+            string vhostKey = Path.Combine(sslDir, "api.key");
+            string vhostChain = Path.Combine(sslDir, "api.chain.crt");
+
+            await File.WriteAllTextAsync(defaultCert, "mock cert default");
+            await File.WriteAllTextAsync(defaultKey, "mock key default");
+            await File.WriteAllTextAsync(vhostCert, "mock cert api");
+            await File.WriteAllTextAsync(vhostKey, "mock key api");
+            await File.WriteAllTextAsync(vhostChain, "mock chain api");
+
+            // Write httpd.conf with ServerRoot
+            await File.WriteAllTextAsync(Path.Combine(confDir, "httpd.conf"), $"ServerRoot \"{apacheRoot.Replace('\\', '/')}\"\n");
+
+            // Write httpd-ssl.conf with global cert
+            await File.WriteAllTextAsync(Path.Combine(extraDir, "httpd-ssl.conf"),
+                "Listen 443\n" +
+                "SSLCertificateFile \"conf/ssl/server.crt\"\n" +
+                "SSLCertificateKeyFile \"conf/ssl/server.key\"\n");
+
+            // Write httpd-vhosts.conf with a VirtualHost *:443
+            await File.WriteAllTextAsync(Path.Combine(extraDir, "httpd-vhosts.conf"),
+                "<VirtualHost *:443>\n" +
+                "    ServerName api.mysite.com\n" +
+                "    SSLEngine on\n" +
+                "    SSLCertificateFile \"conf/ssl/api.crt\"\n" +
+                "    SSLCertificateKeyFile \"conf/ssl/api.key\"\n" +
+                "    SSLCertificateChainFile \"conf/ssl/api.chain.crt\"\n" +
+                "</VirtualHost>\n");
+
+            var sslService = new SslCertificateService();
+            var detected = await sslService.DetectCertificatesAsync(apacheRoot);
+
+            Assert.NotNull(detected);
+            Assert.Equal(2, detected.Count);
+
+            var defaultEntry = detected.FirstOrDefault(c => c.HostName.Contains("Global") || c.HostName.Contains("Default"));
+            Assert.NotNull(defaultEntry);
+            Assert.Equal(defaultCert, defaultEntry.CertificateFilePath);
+            Assert.Equal(defaultKey, defaultEntry.KeyFilePath);
+            Assert.True(defaultEntry.CertificateFileExists);
+            Assert.True(defaultEntry.KeyFileExists);
+
+            var vhostEntry = detected.FirstOrDefault(c => c.HostName == "api.mysite.com");
+            Assert.NotNull(vhostEntry);
+            Assert.Equal(vhostCert, vhostEntry.CertificateFilePath);
+            Assert.Equal(vhostKey, vhostEntry.KeyFilePath);
+            Assert.Equal(vhostChain, vhostEntry.ChainFilePath);
+            Assert.True(vhostEntry.CertificateFileExists);
+            Assert.True(vhostEntry.KeyFileExists);
+        }
+
+        [Fact]
+        public void SslCertificateService_InspectsRealCertificateMetadata()
+        {
+            string certFolder = Path.Combine(_testTempDir, "mock_cert_inspect_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(certFolder);
+
+            string certPath = Path.Combine(certFolder, "test.crt");
+
+            // Generate real self-signed certificate using System.Security.Cryptography
+            using var rsa = System.Security.Cryptography.RSA.Create(2048);
+            var req = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+                "CN=test.example.com",
+                rsa,
+                System.Security.Cryptography.HashAlgorithmName.SHA256,
+                System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+
+            using var realCert = req.CreateSelfSigned(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now.AddDays(90));
+            File.WriteAllBytes(certPath, realCert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Cert));
+
+            var certInfo = new SslCertificateInfo
+            {
+                CertificateFilePath = certPath
+            };
+
+            var sslService = new SslCertificateService();
+            sslService.InspectCertificateFile(certInfo);
+
+            Assert.True(certInfo.CertificateFileExists);
+            Assert.Equal("test.example.com", certInfo.CommonName);
+            Assert.Equal(SslCertificateStatus.Valid, certInfo.Status);
+            Assert.True(certInfo.DaysRemaining > 80 && certInfo.DaysRemaining <= 90);
+            Assert.Contains("Valid", certInfo.StatusDisplayText);
+        }
     }
 }

@@ -30,6 +30,7 @@ namespace XamppUpdate.ViewModels
 
         public event Action? RequestOpenSettings;
         public event Action? RequestOpenApacheWizard;
+        public event Action? RequestOpenSslManager;
 
         public MainViewModel(
             ISettingsService settingsService,
@@ -202,6 +203,12 @@ namespace XamppUpdate.ViewModels
         public void StartApacheUpdate()
         {
             RequestOpenApacheWizard?.Invoke();
+        }
+
+        [RelayCommand]
+        public void OpenSslManager()
+        {
+            RequestOpenSslManager?.Invoke();
         }
     }
 }

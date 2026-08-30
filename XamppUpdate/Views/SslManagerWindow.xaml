@@ -1,0 +1,355 @@
+<Window x:Class="XamppUpdate.Views.SslManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:conv="clr-namespace:XamppUpdate.Converters"
+        mc:Ignorable="d"
+        Title="Apache SSL Certificate Manager"
+        Height="700" Width="1040"
+        MinHeight="580" MinWidth="850"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/app.ico"
+        Background="{StaticResource WindowBgBrush}">
+
+    <Window.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisConverter" />
+        <conv:BoolToVisibilityConverter x:Key="InverseBoolToVisConverter" Invert="True" />
+        <conv:InverseBooleanConverter x:Key="InverseBoolConverter" />
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Top Header & Stat Badges -->
+            <RowDefinition Height="Auto" />
+            <!-- Apache Path Bar -->
+            <RowDefinition Height="Auto" />
+            <!-- Main Content Area -->
+            <RowDefinition Height="*" />
+            <!-- In-Place Update Drawer / Panel -->
+            <RowDefinition Height="Auto" />
+            <!-- Status Bar Footer -->
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Top Header -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="🔒 " FontSize="18" VerticalAlignment="Center" />
+                        <TextBlock Text="Apache SSL Certificate Manager" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="Auto-detected live SSL certificates, private keys, and real file paths declared in Apache."
+                               FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,3,0,0" />
+                </StackPanel>
+
+                <!-- Statistics Badges -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#F1F5F9" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                        <TextBlock Text="{Binding TotalCount, StringFormat='{}{0} Configured'}" FontSize="12" FontWeight="SemiBold" Foreground="#475569" />
+                    </Border>
+                    <Border Background="#DCFCE7" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                        <TextBlock Text="{Binding HealthyCount, StringFormat='{}{0} Valid'}" FontSize="12" FontWeight="Bold" Foreground="#15803D" />
+                    </Border>
+                    <Border Background="#FEF3C7" CornerRadius="6" Padding="10,4" Margin="0,0,8,0"
+                            Visibility="{Binding ExpiringSoonCount, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="{Binding ExpiringSoonCount, StringFormat='{}{0} Expiring Soon'}" FontSize="12" FontWeight="Bold" Foreground="#B45309" />
+                    </Border>
+                    <Border Background="#FEE2E2" CornerRadius="6" Padding="10,4"
+                            Visibility="{Binding ProblemCount, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="{Binding ProblemCount, StringFormat='{}{0} Attention Needed'}" FontSize="12" FontWeight="Bold" Foreground="#B91C1C" />
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Apache Path Bar -->
+        <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="Apache Path:" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                <TextBox Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
+                         Text="{Binding ApachePath, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="12.5" Padding="8,5" VerticalAlignment="Center" />
+
+                <Button Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                        Content="📁 Browse..."
+                        Command="{Binding BrowseApacheDirectoryCommand}"
+                        Padding="12,5" Margin="8,0,0,0" VerticalAlignment="Center" />
+
+                <Button Grid.Column="3" Style="{StaticResource PrimaryButtonStyle}"
+                        Content="🔄 Re-Scan Configs"
+                        Command="{Binding LoadCertificatesCommand}"
+                        IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}"
+                        Padding="14,5" Margin="8,0,0,0" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Main Content Area -->
+        <Grid Grid.Row="2">
+            <!-- Loading Indicator -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisConverter}}">
+                <TextBlock Text="🔍 Scanning Apache configuration files for SSL directives..." FontSize="13.5" FontWeight="SemiBold" Foreground="{StaticResource PrimaryAccentBrush}" HorizontalAlignment="Center" Margin="0,0,0,10" />
+                <ProgressBar Style="{StaticResource ModernProgressBarStyle}" Width="300" Height="8" IsIndeterminate="True" />
+            </StackPanel>
+
+            <!-- Empty State -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="560" Margin="24"
+                        Visibility="{Binding Certificates.Count, Converter={StaticResource InverseBoolToVisConverter}}">
+                <Border Background="#F0F9FF" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="10" Padding="20">
+                    <StackPanel>
+                        <TextBlock Text="ℹ️ No Active SSL Certificates Detected" FontSize="14.5" FontWeight="Bold" Foreground="#0369A1" Margin="0,0,0,8" />
+                        <TextBlock Text="No 'SSLCertificateFile' directives were found in the current Apache path. To use SSL in Apache/XAMPP:"
+                                   FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,8" TextWrapping="Wrap" />
+                        <TextBlock Text="• Ensure 'LoadModule ssl_module modules/mod_ssl.so' is enabled in conf/httpd.conf." FontSize="12" Foreground="#0369A1" Margin="0,2" />
+                        <TextBlock Text="• Ensure 'Include conf/extra/httpd-ssl.conf' or VirtualHosts are enabled." FontSize="12" Foreground="#0369A1" Margin="0,2" />
+                        <TextBlock Text="• Check the Apache Path above points to your active Apache folder." FontSize="12" Foreground="#0369A1" Margin="0,2" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Certificates List -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,16"
+                          Visibility="{Binding Certificates.Count, Converter={StaticResource BoolToVisConverter}}">
+                <ItemsControl ItemsSource="{Binding Certificates}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,0,14" Padding="18">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Row 0: Card Header (Host Name, Port, Status Badge, Source Config) -->
+                                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="🌐 " FontSize="14" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding HostName}" FontWeight="Bold" FontSize="14.5" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                            <Border Background="#EEF2F6" CornerRadius="4" Padding="6,2" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                <TextBlock Text="{Binding Port, StringFormat='Port: {0}'}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" FontWeight="SemiBold" />
+                                            </Border>
+                                            <TextBlock Text="{Binding ConfigSourceFile, StringFormat='Config: {0}'}" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+
+                                        <!-- Status Badge -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Background="{Binding StatusBadgeBackground}" CornerRadius="6" Padding="10,3">
+                                                <TextBlock Text="{Binding StatusDisplayText}" Foreground="{Binding StatusBadgeForeground}" FontSize="11.5" FontWeight="Bold" />
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Row 1: Certificate Metadata Grid (Subject, Issuer, Validity) -->
+                                    <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1.5*" />
+                                                <ColumnDefinition Width="1.5*" />
+                                                <ColumnDefinition Width="1.2*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Common Name / Domain -->
+                                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                                <TextBlock Text="DOMAIN (COMMON NAME)" FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" />
+                                                <TextBlock Text="{Binding CommonName}" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+
+                                            <!-- Issuer -->
+                                            <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                                                <TextBlock Text="ISSUER / CA" FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" />
+                                                <TextBlock Text="{Binding Issuer}" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+
+                                            <!-- Valid To / Expiry -->
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="EXPIRATION DATE" FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" />
+                                                <TextBlock Text="{Binding ValidTo, StringFormat='{}{0:yyyy-MM-dd}'}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Row 2: File Locations & Action Buttons -->
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Real File Paths -->
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <!-- Certificate File Path -->
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="100" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Certificate (.crt):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                                <TextBox Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
+                                                         Text="{Binding CertificateFilePath, Mode=OneWay}"
+                                                         IsReadOnly="True" FontSize="11.5" Padding="6,3" VerticalAlignment="Center" />
+                                                <Button Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                                                        Content="📂 Folder"
+                                                        Command="{Binding DataContext.OpenCertFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Padding="8,3" FontSize="11" Margin="6,0,0,0" ToolTip="Open certificate directory in Windows Explorer" />
+                                                <Button Grid.Column="3" Style="{StaticResource SecondaryButtonStyle}"
+                                                        Content="👁️ View Cert"
+                                                        Command="{Binding DataContext.OpenCertInViewerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Padding="8,3" FontSize="11" Margin="6,0,0,0" ToolTip="Open certificate in Windows Certificate Viewer" />
+                                            </Grid>
+
+                                            <!-- Private Key File Path -->
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="100" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Private Key (.key):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                                <TextBox Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
+                                                         Text="{Binding KeyFilePath, Mode=OneWay}"
+                                                         IsReadOnly="True" FontSize="11.5" Padding="6,3" VerticalAlignment="Center" />
+                                                <Button Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                                                        Content="📂 Folder"
+                                                        Command="{Binding DataContext.OpenKeyFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Padding="8,3" FontSize="11" Margin="6,0,0,0" ToolTip="Open private key directory in Windows Explorer" />
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!-- Update Button -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource PrimaryButtonStyle}"
+                                                    Content="🔄 Update Certificate"
+                                                    Command="{Binding DataContext.StartUpdateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Padding="14,8" FontSize="12.5" FontWeight="SemiBold" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- In-Place Update Drawer / Panel -->
+        <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="{StaticResource PrimaryAccentBrush}" BorderThickness="0,2,0,0" Padding="24,16"
+                Visibility="{Binding IsUpdatePanelOpen, Converter={StaticResource BoolToVisConverter}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Drawer Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock Text="🔄 Replace / Update Certificate for: " FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                        <TextBlock Text="{Binding UpdateTargetCert.HostName}" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource PrimaryAccentBrush}" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="✕ Close" Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding CancelUpdateCommand}" Padding="10,4" FontSize="11" />
+                </Grid>
+
+                <!-- Input Fields Form -->
+                <Grid Grid.Row="1" Margin="0,0,0,10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- New Certificate File -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="New Certificate File:" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" Margin="0,0,0,6" />
+                    <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
+                             Text="{Binding NewCertFilePath, UpdateSourceTrigger=PropertyChanged}"
+                             FontSize="12" Padding="8,4" VerticalAlignment="Center" Margin="0,0,0,6" />
+                    <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                            Content="Browse .crt/.pem..."
+                            Command="{Binding BrowseNewCertFileCommand}"
+                            Padding="10,4" FontSize="11" Margin="6,0,0,6" VerticalAlignment="Center" />
+
+                    <!-- New Private Key File -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="New Private Key File:" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" Margin="0,0,0,6" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
+                             Text="{Binding NewKeyFilePath, UpdateSourceTrigger=PropertyChanged}"
+                             FontSize="12" Padding="8,4" VerticalAlignment="Center" Margin="0,0,0,6" />
+                    <Button Grid.Row="1" Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                            Content="Browse .key/.pem..."
+                            Command="{Binding BrowseNewKeyFileCommand}"
+                            Padding="10,4" FontSize="11" Margin="6,0,0,6" VerticalAlignment="Center" />
+
+                    <!-- New Chain File (Optional) -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="New Chain (Optional):" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" Margin="0,0,0,6" />
+                    <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
+                             Text="{Binding NewChainFilePath, UpdateSourceTrigger=PropertyChanged}"
+                             FontSize="12" Padding="8,4" VerticalAlignment="Center" Margin="0,0,0,6" />
+                    <Button Grid.Row="2" Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                            Content="Browse Chain..."
+                            Command="{Binding BrowseNewChainFileCommand}"
+                            Padding="10,4" FontSize="11" Margin="6,0,0,6" VerticalAlignment="Center" />
+
+                    <!-- Options & Submit -->
+                    <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,6,0,0">
+                        <CheckBox Content="Create timestamped backup of existing cert &amp; key files before replacing"
+                                  IsChecked="{Binding BackupExisting}"
+                                  FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" Margin="0,0,20,0" />
+                        <Button Style="{StaticResource SuccessButtonStyle}"
+                                Content="✓ Replace &amp; Apply Certificate Now"
+                                Command="{Binding ExecuteUpdateCommand}"
+                                IsEnabled="{Binding IsUpdating, Converter={StaticResource InverseBoolConverter}}"
+                                Padding="16,6" FontSize="12.5" FontWeight="Bold" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Update Status Message -->
+                <TextBlock Grid.Row="2" Text="{Binding UpdateMessage}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,2,0,0" />
+            </Grid>
+        </Border>
+
+        <!-- Status Bar Footer -->
+        <Border Grid.Row="4" Background="{StaticResource SurfaceBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="20,8">
+            <Grid>
+                <TextBlock Text="{Binding StatusMessage}" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="XamppUpdate SSL Management" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
