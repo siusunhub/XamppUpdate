@@ -154,6 +154,23 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
+        public void OpenPhpOfficialUrl()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://www.php.net",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Could not open browser: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
         public void OpenPhpDownloadUrl()
         {
             try
