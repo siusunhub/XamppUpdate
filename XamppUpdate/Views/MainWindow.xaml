@@ -176,19 +176,10 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="🐞 Test Error Trace"
-                            Click="BtnTestErrorTrace_Click"
-                            Cursor="Hand"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="{StaticResource TextMutedBrush}"
-                            FontSize="11"
-                            Margin="0,0,12,0"
-                            ToolTip="Debug: Trigger sample C# error popup to test stack trace and copy (or press Ctrl+Shift+D)" />
                     <Border Background="#DCFCE7" CornerRadius="4" Padding="6,2" Margin="0,0,10,0">
                         <TextBlock Text="🛡️ Administrator Privileges Active" FontSize="11" FontWeight="SemiBold" Foreground="#15803D" />
                     </Border>
-                    <TextBlock Text="v1.0.0" FontSize="12" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="v0.1" FontSize="12" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
                 </StackPanel>
             </Grid>
         </Border>

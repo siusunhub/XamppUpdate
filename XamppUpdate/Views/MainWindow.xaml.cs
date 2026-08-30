@@ -26,36 +26,7 @@ namespace XamppUpdate.Views
             _viewModel.RequestOpenSettings += OnOpenSettings;
             _viewModel.RequestOpenApacheWizard += OnOpenApacheWizard;
 
-            KeyDown += (s, e) =>
-            {
-                if (e.Key == System.Windows.Input.Key.D &&
-                    (System.Windows.Input.Keyboard.Modifiers & (System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift)) == (System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift))
-                {
-                    TriggerSampleDebugError();
-                }
-            };
-
             Loaded += async (_, _) => await _viewModel.RefreshStatusesAsync();
-        }
-
-        private void BtnTestErrorTrace_Click(object sender, RoutedEventArgs e)
-        {
-            TriggerSampleDebugError();
-        }
-
-        private void TriggerSampleDebugError()
-        {
-            try
-            {
-                // Generate a real sample nested exception with full stack trace for testing
-                throw new InvalidOperationException(
-                    "Simulated debug error: Component health check failed due to an unexpected null reference.",
-                    new System.IO.FileNotFoundException("Simulated missing configuration file: httpd.conf", "httpd.conf"));
-            }
-            catch (Exception ex)
-            {
-                ErrorDialogWindow.Show(ex, "Debug Error Trace Test", this);
-            }
         }
 
         private void OnOpenSettings()
