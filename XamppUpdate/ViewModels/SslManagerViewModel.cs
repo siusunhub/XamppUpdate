@@ -15,6 +15,7 @@ namespace XamppUpdate.ViewModels
     {
         private readonly ISslCertificateService _sslService;
         private readonly ISettingsService _settingsService;
+        private readonly IWindowsServiceManager _serviceManager;
 
         [ObservableProperty]
         private string _apachePath = string.Empty;
@@ -68,12 +69,22 @@ namespace XamppUpdate.ViewModels
         [ObservableProperty]
         private bool _isUpdating;
 
+        [ObservableProperty]
+        private bool _isUpdateSuccess;
+
+        [ObservableProperty]
+        private bool _isRestartingApache;
+
         public ObservableCollection<SslCertificateInfo> Certificates { get; } = new();
 
-        public SslManagerViewModel(ISslCertificateService sslService, ISettingsService settingsService)
+        public SslManagerViewModel(
+            ISslCertificateService sslService,
+            ISettingsService settingsService,
+            IWindowsServiceManager serviceManager)
         {
             _sslService = sslService;
             _settingsService = settingsService;
+            _serviceManager = serviceManager;
             ApachePath = _settingsService.CurrentSettings.Apache.InstallationPath;
         }
 
@@ -202,6 +213,7 @@ namespace XamppUpdate.ViewModels
             NewKeyFilePath = string.Empty;
             NewChainFilePath = string.Empty;
             UpdateMessage = string.Empty;
+            IsUpdateSuccess = false;
             IsUpdatePanelOpen = true;
         }
 
@@ -294,18 +306,88 @@ namespace XamppUpdate.ViewModels
                     ExpiringSoonCount = Certificates.Count(c => c.Status == SslCertificateStatus.ExpiringSoon);
                     ProblemCount = Certificates.Count(c => c.Status == SslCertificateStatus.Expired || c.Status == SslCertificateStatus.FileNotFound || c.Status == SslCertificateStatus.ParseError);
 
-                    UpdateMessage = "✓ SSL Certificate successfully updated and verified!";
-                    await Task.Delay(1000);
-                    IsUpdatePanelOpen = false;
+                    UpdateMessage = "✓ SSL Certificate updated successfully! Restart Apache service to apply.";
+                    IsUpdateSuccess = true;
                 }
             }
             catch (Exception ex)
             {
                 UpdateMessage = $"Update failed: {ex.Message}";
+                IsUpdateSuccess = false;
             }
             finally
             {
                 IsUpdating = false;
+            }
+        }
+
+        [RelayCommand]
+        public async Task RestartApacheServiceAsync()
+        {
+            if (IsRestartingApache) return;
+
+            IsRestartingApache = true;
+            string serviceName = _settingsService.CurrentSettings.Apache.ServiceName;
+            UpdateMessage = $"Attempting to restart Apache service '{serviceName}'...";
+
+            try
+            {
+                if (_serviceManager.ServiceExists(serviceName))
+                {
+                    var status = await _serviceManager.GetServiceStatusAsync(serviceName);
+                    if (status == System.ServiceProcess.ServiceControllerStatus.Running)
+                    {
+                        UpdateMessage = $"Stopping Apache service '{serviceName}'...";
+                        await _serviceManager.StopServiceAsync(serviceName, TimeSpan.FromSeconds(25));
+                    }
+
+                    UpdateMessage = $"Starting Apache service '{serviceName}'...";
+                    bool started = await _serviceManager.StartServiceAsync(serviceName, TimeSpan.FromSeconds(25));
+                    if (started)
+                    {
+                        UpdateMessage = $"✓ Apache service '{serviceName}' restarted successfully!";
+                    }
+                    else
+                    {
+                        UpdateMessage = $"Could not start Apache service '{serviceName}'. Please check Apache error logs.";
+                    }
+                }
+                else
+                {
+                    // Fallback to httpd.exe -k restart
+                    string httpdExe = Path.Combine(ApachePath, "bin", "httpd.exe");
+                    if (File.Exists(httpdExe))
+                    {
+                        UpdateMessage = "Executing 'httpd.exe -k restart'...";
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = httpdExe,
+                            Arguments = "-k restart",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using var proc = System.Diagnostics.Process.Start(psi);
+                        if (proc != null)
+                        {
+                            await proc.WaitForExitAsync();
+                            UpdateMessage = proc.ExitCode == 0
+                                ? "✓ Executed 'httpd.exe -k restart' successfully!"
+                                : $"httpd.exe returned code {proc.ExitCode}. Please check logs.";
+                        }
+                    }
+                    else
+                    {
+                        UpdateMessage = $"Service '{serviceName}' is not installed as a Windows service. Please restart Apache via XAMPP Control Panel.";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UpdateMessage = $"Error restarting Apache: {ex.Message}";
+            }
+            finally
+            {
+                IsRestartingApache = false;
             }
         }
     }

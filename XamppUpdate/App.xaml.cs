@@ -66,7 +66,7 @@ namespace XamppUpdate
                 mainViewModel,
                 () => new SettingsViewModel(_settingsService),
                 () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService),
-                () => new SslManagerViewModel(_sslCertificateService, _settingsService));
+                () => new SslManagerViewModel(_sslCertificateService, _settingsService, _serviceManager));
 
             MainWindow = mainWindow;
             mainWindow.Show();

@@ -365,8 +365,31 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Update Status Message -->
-                <TextBlock Grid.Row="2" Text="{Binding UpdateMessage}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,2,0,0" />
+                <!-- Update Status Message & Restart Button Area -->
+                <Grid Grid.Row="2" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="{Binding UpdateMessage}" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
+
+                    <!-- Post-Update Restart Apache Button -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="{Binding IsUpdateSuccess, Converter={StaticResource BoolToVisConverter}}">
+                        <Button Style="{StaticResource PrimaryButtonStyle}"
+                                Content="🔄 Restart Apache Service"
+                                Command="{Binding RestartApacheServiceCommand}"
+                                IsEnabled="{Binding IsRestartingApache, Converter={StaticResource InverseBoolConverter}}"
+                                Padding="14,6" FontSize="12" FontWeight="Bold" Margin="10,0,0,0"
+                                ToolTip="Restart Apache service to immediately apply the updated SSL certificate" />
+                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                Content="✓ Done"
+                                Command="{Binding CancelUpdateCommand}"
+                                Padding="12,6" FontSize="12" Margin="8,0,0,0" />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 
