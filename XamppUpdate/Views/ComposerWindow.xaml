@@ -61,39 +61,59 @@
                     </Border>
                 </Grid>
 
-                <!-- Path Configuration Row -->
-                <Grid Grid.Row="1">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
+                <!-- Path Configuration Rows (3 Configured Paths) -->
+                <StackPanel Grid.Row="1">
                     <!-- Executable Path -->
-                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                        <TextBlock Text="Composer Executable (composer.bat / composer.phar):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
-                        <Grid>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Composer Executable (composer.bat / composer.phar):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,3" />
+                        <Grid Grid.Row="1">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox Grid.Column="0" Text="{Binding ComposerExecutablePath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBoxStyle}" FontSize="12" Padding="8,6" />
-                            <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseComposerExecutableCommand}" Padding="10,6" Margin="6,0,0,0" />
+                            <TextBox Grid.Column="0" Text="{Binding ComposerExecutablePath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBoxStyle}" FontSize="12" Padding="8,5" />
+                            <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseComposerExecutableCommand}" Padding="10,5" Margin="6,0,0,0" />
                         </Grid>
-                    </StackPanel>
+                    </Grid>
 
-                    <!-- Project Working Directory -->
-                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                        <TextBlock Text="Project Working Directory (folder containing composer.json):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox Grid.Column="0" Text="{Binding WorkingDirectory, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBoxStyle}" FontSize="12" Padding="8,6" />
-                            <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseWorkingDirectoryCommand}" Padding="10,6" Margin="6,0,0,0" />
-                        </Grid>
-                    </StackPanel>
-                </Grid>
+                    <!-- Dual Target Directories: Download Target & WWW Target -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Download Target Path (for backup retention) -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Download Target Directory (Archive / Backup Retention):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,3" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding DownloadTargetPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBoxStyle}" FontSize="12" Padding="8,5" />
+                                <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseDownloadTargetCommand}" Padding="10,5" Margin="6,0,0,0" />
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- WWW Target Path (real folder for web access) -->
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                            <TextBlock Text="WWW Target Directory (Real Folder for Web Access / composer.json):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,3" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding WwwTargetPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBoxStyle}" FontSize="12" Padding="8,5" />
+                                <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="Browse..." Command="{Binding BrowseWwwTargetCommand}" Padding="10,5" Margin="6,0,0,0" />
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
             </Grid>
         </Border>
 

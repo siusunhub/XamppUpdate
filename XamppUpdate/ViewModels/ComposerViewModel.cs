@@ -21,7 +21,10 @@ namespace XamppUpdate.ViewModels
         private string _composerExecutablePath = string.Empty;
 
         [ObservableProperty]
-        private string _workingDirectory = string.Empty;
+        private string _downloadTargetPath = string.Empty;
+
+        [ObservableProperty]
+        private string _wwwTargetPath = string.Empty;
 
         [ObservableProperty]
         private string _composerVersion = "Detecting...";
@@ -49,20 +52,8 @@ namespace XamppUpdate.ViewModels
 
             var settings = _settingsService.CurrentSettings;
             ComposerExecutablePath = settings.Composer.ExecutablePath;
-
-            // Pick reasonable working directory default
-            if (!string.IsNullOrWhiteSpace(settings.Composer.WwwTargetPath) && Directory.Exists(settings.Composer.WwwTargetPath))
-            {
-                WorkingDirectory = settings.Composer.WwwTargetPath;
-            }
-            else if (!string.IsNullOrWhiteSpace(settings.Composer.DownloadTargetPath) && Directory.Exists(settings.Composer.DownloadTargetPath))
-            {
-                WorkingDirectory = settings.Composer.DownloadTargetPath;
-            }
-            else if (Directory.Exists(@"C:\xampp\htdocs"))
-            {
-                WorkingDirectory = @"C:\xampp\htdocs";
-            }
+            DownloadTargetPath = settings.Composer.DownloadTargetPath;
+            WwwTargetPath = settings.Composer.WwwTargetPath;
 
             _ = RefreshVersionAsync();
         }
@@ -91,23 +82,54 @@ namespace XamppUpdate.ViewModels
             if (dialog.ShowDialog() == true)
             {
                 ComposerExecutablePath = dialog.FileName;
+                PersistSettings();
                 _ = RefreshVersionAsync();
             }
         }
 
         [RelayCommand]
-        public void BrowseWorkingDirectory()
+        public void BrowseDownloadTarget()
         {
             var dialog = new OpenFolderDialog
             {
-                Title = "Select Project Working Directory (Folder with composer.json)",
-                InitialDirectory = Directory.Exists(WorkingDirectory) ? WorkingDirectory : @"C:\xampp\htdocs"
+                Title = "Select Download Target Directory (Archive Retention / Backup Copies)",
+                InitialDirectory = Directory.Exists(DownloadTargetPath) ? DownloadTargetPath : @"C:\"
             };
 
             if (dialog.ShowDialog() == true)
             {
-                WorkingDirectory = dialog.FolderName;
+                DownloadTargetPath = dialog.FolderName;
+                PersistSettings();
             }
+        }
+
+        [RelayCommand]
+        public void BrowseWwwTarget()
+        {
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Select WWW Target Directory (Real Folder for Web Access / composer.json)",
+                InitialDirectory = Directory.Exists(WwwTargetPath) ? WwwTargetPath : @"C:\xampp\htdocs"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                WwwTargetPath = dialog.FolderName;
+                PersistSettings();
+            }
+        }
+
+        private void PersistSettings()
+        {
+            try
+            {
+                var settings = _settingsService.CurrentSettings;
+                settings.Composer.ExecutablePath = ComposerExecutablePath;
+                settings.Composer.DownloadTargetPath = DownloadTargetPath;
+                settings.Composer.WwwTargetPath = WwwTargetPath;
+                _ = _settingsService.SaveSettingsAsync(settings);
+            }
+            catch { }
         }
 
         [RelayCommand]
@@ -140,12 +162,16 @@ namespace XamppUpdate.ViewModels
         {
             if (IsBusy) return;
 
-            PrepareExecution("Check New Components (composer outdated)");
+            string targetDir = !string.IsNullOrWhiteSpace(WwwTargetPath) && Directory.Exists(WwwTargetPath)
+                ? WwwTargetPath
+                : DownloadTargetPath;
+
+            PrepareExecution($"Check New Components (composer outdated in {targetDir})");
             var progress = CreateProgressReporter();
 
             try
             {
-                bool success = await _composerService.RunCheckOutdatedAsync(ComposerExecutablePath, WorkingDirectory, progress, _cts!.Token);
+                bool success = await _composerService.RunCheckOutdatedAsync(ComposerExecutablePath, targetDir, progress, _cts!.Token);
                 StatusMessage = success ? "Component inspection completed." : "Component inspection finished with warnings/errors.";
             }
             catch (Exception ex)
@@ -164,13 +190,27 @@ namespace XamppUpdate.ViewModels
         {
             if (IsBusy) return;
 
-            string opName = IsTestMode ? "Package Update Simulation (dry-run)" : "Live Package Update & Vendor Backup";
+            string targetDir = !string.IsNullOrWhiteSpace(WwwTargetPath) && Directory.Exists(WwwTargetPath)
+                ? WwwTargetPath
+                : DownloadTargetPath;
+
+            string opName = IsTestMode
+                ? $"Package Update Simulation (dry-run in {targetDir})"
+                : $"Live Package Update in {targetDir} & Vendor Backup to {DownloadTargetPath}";
+
             PrepareExecution(opName);
             var progress = CreateProgressReporter();
 
             try
             {
-                bool success = await _composerService.RunUpdatePackagesAsync(ComposerExecutablePath, WorkingDirectory, IsTestMode, progress, _cts!.Token);
+                bool success = await _composerService.RunUpdatePackagesAsync(
+                    ComposerExecutablePath,
+                    targetDir,
+                    DownloadTargetPath,
+                    IsTestMode,
+                    progress,
+                    _cts!.Token);
+
                 if (success)
                 {
                     StatusMessage = IsTestMode

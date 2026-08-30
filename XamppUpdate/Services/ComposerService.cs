@@ -78,11 +78,11 @@ namespace XamppUpdate.Services
             return await ExecuteComposerProcessAsync(composerExecutable, "outdated", workingDirectory, progress, cancellationToken);
         }
 
-        public async Task<bool> RunUpdatePackagesAsync(string composerExecutable, string workingDirectory, bool isTestMode, IProgress<string> progress, CancellationToken cancellationToken = default)
+        public async Task<bool> RunUpdatePackagesAsync(string composerExecutable, string workingDirectory, string? backupDestinationDirectory, bool isTestMode, IProgress<string> progress, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(workingDirectory) || !Directory.Exists(workingDirectory))
             {
-                progress.Report($"[ERROR] Working directory does not exist: {workingDirectory}");
+                progress.Report($"[ERROR] Target project WWW directory does not exist: {workingDirectory}");
                 return false;
             }
 
@@ -94,10 +94,10 @@ namespace XamppUpdate.Services
 
             // Real Update: 1. Backup vendor folder first
             progress.Report($"[STEP 1/2] Creating backup of current 'vendor' folder...");
-            string? backupZip = await BackupVendorFolderAsync(workingDirectory, progress, cancellationToken);
+            string? backupZip = await BackupVendorFolderAsync(workingDirectory, backupDestinationDirectory, progress, cancellationToken);
             if (backupZip != null)
             {
-                progress.Report($"[BACKUP] Vendor backup saved to: {backupZip}");
+                progress.Report($"[BACKUP] Vendor backup preserved in: {backupZip}");
             }
 
             // 2. Run real composer update
@@ -105,7 +105,7 @@ namespace XamppUpdate.Services
             return await ExecuteComposerProcessAsync(composerExecutable, "update --no-interaction", workingDirectory, progress, cancellationToken);
         }
 
-        public async Task<string?> BackupVendorFolderAsync(string workingDirectory, IProgress<string> progress, CancellationToken cancellationToken = default)
+        public async Task<string?> BackupVendorFolderAsync(string workingDirectory, string? destinationBackupDirectory, IProgress<string> progress, CancellationToken cancellationToken = default)
         {
             return await Task.Run(() =>
             {
@@ -118,22 +118,24 @@ namespace XamppUpdate.Services
                         return null;
                     }
 
-                    string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                    string backupDir = Path.Combine(baseDir, "backup");
-                    if (!Directory.Exists(backupDir))
+                    string targetBackupDir = !string.IsNullOrWhiteSpace(destinationBackupDirectory)
+                        ? destinationBackupDirectory
+                        : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup");
+
+                    if (!Directory.Exists(targetBackupDir))
                     {
-                        Directory.CreateDirectory(backupDir);
+                        Directory.CreateDirectory(targetBackupDir);
                     }
 
                     string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                    string backupZipPath = Path.Combine(backupDir, $"vendor_backup_{timestamp}.zip");
+                    string backupZipPath = Path.Combine(targetBackupDir, $"vendor_backup_{timestamp}.zip");
 
-                    progress.Report($"[BACKUP] Compressing vendor directory to zip...");
+                    progress.Report($"[BACKUP] Compressing vendor directory to zip archive...");
                     ZipFile.CreateFromDirectory(vendorPath, backupZipPath, CompressionLevel.Optimal, false);
 
                     var fileInfo = new FileInfo(backupZipPath);
                     double sizeMb = fileInfo.Length / (1024.0 * 1024.0);
-                    progress.Report($"[BACKUP] ✓ Backup created successfully: {Path.GetFileName(backupZipPath)} ({sizeMb:F2} MB)");
+                    progress.Report($"[BACKUP] ✓ Backup created successfully: {Path.GetFileName(backupZipPath)} in {targetBackupDir} ({sizeMb:F2} MB)");
                     return backupZipPath;
                 }
                 catch (Exception ex)

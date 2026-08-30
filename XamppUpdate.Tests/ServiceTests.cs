@@ -561,10 +561,12 @@ namespace XamppUpdate.Tests
             var logs = new List<string>();
             var progress = new Progress<string>(l => logs.Add(l));
 
-            string? backupPath = await composerService.BackupVendorFolderAsync(projectDir, progress);
+            string backupDestDir = Path.Combine(_testTempDir, "composer_backups");
+            string? backupPath = await composerService.BackupVendorFolderAsync(projectDir, backupDestDir, progress);
 
             Assert.NotNull(backupPath);
             Assert.True(File.Exists(backupPath));
+            Assert.StartsWith(backupDestDir, backupPath);
             Assert.True(new FileInfo(backupPath).Length > 0);
 
             // Verify zip contains vendor files
