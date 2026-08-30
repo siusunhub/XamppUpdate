@@ -115,10 +115,10 @@
             </StackPanel>
         </Border>
 
-        <!-- Stack Trace Section -->
+        <!-- Stack Trace Section (Light Theme) -->
         <Border Grid.Row="2"
-                Background="#0F172A"
-                BorderBrush="#1E293B"
+                Background="{StaticResource SurfaceSubtleBgBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
                 Padding="12">
@@ -127,14 +127,14 @@
                     <TextBlock Text="C# CALL STACK TRACE &amp; DIAGNOSTIC DETAILS"
                                FontSize="11"
                                FontWeight="Bold"
-                               Foreground="#94A3B8"
+                               Foreground="{StaticResource TextSecondaryBrush}"
                                VerticalAlignment="Center" />
                     <Button Content="Select All"
                             Click="BtnSelectAll_Click"
                             Cursor="Hand"
                             Background="Transparent"
                             BorderThickness="0"
-                            Foreground="#38BDF8"
+                            Foreground="{StaticResource PrimaryAccentBrush}"
                             FontSize="11"
                             FontWeight="SemiBold"
                             HorizontalAlignment="Right"
@@ -143,7 +143,7 @@
 
                 <TextBox x:Name="TxtStackTrace"
                          Background="Transparent"
-                         Foreground="#E2E8F0"
+                         Foreground="{StaticResource TextPrimaryBrush}"
                          BorderThickness="0"
                          FontFamily="Consolas, Cascadia Code, Courier New"
                          FontSize="12"

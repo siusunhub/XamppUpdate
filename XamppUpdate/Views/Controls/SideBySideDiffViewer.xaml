@@ -331,12 +331,12 @@
                 </Grid>
             </Border>
 
-            <!-- Text Editor -->
+            <!-- Text Editor (Light Theme) -->
             <TextBox Grid.Row="1" x:Name="TxtDirectEditor"
-                     Background="#0F172A"
-                     Foreground="#F8FAFC"
-                     CaretBrush="#38BDF8"
-                     SelectionBrush="#0284C7"
+                     Background="#FFFFFF"
+                     Foreground="{StaticResource TextPrimaryBrush}"
+                     CaretBrush="{StaticResource PrimaryAccentBrush}"
+                     SelectionBrush="{StaticResource PrimaryAccentSubtleBrush}"
                      BorderThickness="0"
                      FontFamily="Consolas, Cascadia Code, Courier New"
                      FontSize="12.5"
