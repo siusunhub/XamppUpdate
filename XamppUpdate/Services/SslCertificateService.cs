@@ -258,6 +258,7 @@ namespace XamppUpdate.Services
         {
             certInfo.CertificateFileExists = File.Exists(certInfo.CertificateFilePath);
             certInfo.KeyFileExists = !string.IsNullOrEmpty(certInfo.KeyFilePath) && File.Exists(certInfo.KeyFilePath);
+            certInfo.ChainFileExists = !string.IsNullOrEmpty(certInfo.ChainFilePath) && File.Exists(certInfo.ChainFilePath);
 
             if (!certInfo.CertificateFileExists)
             {

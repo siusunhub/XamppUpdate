@@ -172,6 +172,26 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
+        public void OpenChainFolder(SslCertificateInfo? cert)
+        {
+            var target = cert ?? SelectedCertificate;
+            if (target != null && !string.IsNullOrEmpty(target.ChainFilePath))
+            {
+                _sslService.OpenFileInExplorer(target.ChainFilePath);
+            }
+        }
+
+        [RelayCommand]
+        public void OpenChainInViewer(SslCertificateInfo? cert)
+        {
+            var target = cert ?? SelectedCertificate;
+            if (target != null && !string.IsNullOrEmpty(target.ChainFilePath))
+            {
+                _sslService.OpenCertificateInViewer(target.ChainFilePath);
+            }
+        }
+
+        [RelayCommand]
         public void StartUpdate(SslCertificateInfo? cert)
         {
             var target = cert ?? SelectedCertificate;

@@ -44,6 +44,8 @@ namespace XamppUpdate.Models
         private string _keyFilePath = string.Empty;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasChainFile))]
+        [NotifyPropertyChangedFor(nameof(ChainFileDisplayText))]
         private string _chainFilePath = string.Empty;
 
         [ObservableProperty]
@@ -54,6 +56,15 @@ namespace XamppUpdate.Models
 
         [ObservableProperty]
         private bool _keyFileExists;
+
+        [ObservableProperty]
+        private bool _chainFileExists;
+
+        public bool HasChainFile => !string.IsNullOrWhiteSpace(ChainFilePath);
+
+        public string ChainFileDisplayText => HasChainFile
+            ? ChainFilePath
+            : "None (Standalone cert or bundled in fullchain.pem)";
 
         [ObservableProperty]
         private string _subject = string.Empty;

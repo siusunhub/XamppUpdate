@@ -223,7 +223,7 @@
                                             </Grid>
 
                                             <!-- Private Key File Path -->
-                                            <Grid>
+                                            <Grid Margin="0,0,0,6">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="100" />
                                                     <ColumnDefinition Width="*" />
@@ -238,6 +238,32 @@
                                                         Command="{Binding DataContext.OpenKeyFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                         CommandParameter="{Binding}"
                                                         Padding="8,3" FontSize="11" Margin="6,0,0,0" ToolTip="Open private key directory in Windows Explorer" />
+                                            </Grid>
+
+                                            <!-- Intermediate CA Chain File Path -->
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="100" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Chain File (.crt):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                                <TextBox Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
+                                                         Text="{Binding ChainFileDisplayText, Mode=OneWay}"
+                                                         IsReadOnly="True" FontSize="11.5" Padding="6,3" VerticalAlignment="Center" />
+                                                <Button Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                                                        Content="📂 Folder"
+                                                        Visibility="{Binding HasChainFile, Converter={StaticResource BoolToVisConverter}}"
+                                                        Command="{Binding DataContext.OpenChainFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Padding="8,3" FontSize="11" Margin="6,0,0,0" ToolTip="Open chain file directory in Windows Explorer" />
+                                                <Button Grid.Column="3" Style="{StaticResource SecondaryButtonStyle}"
+                                                        Content="👁️ View Chain"
+                                                        Visibility="{Binding HasChainFile, Converter={StaticResource BoolToVisConverter}}"
+                                                        Command="{Binding DataContext.OpenChainInViewerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Padding="8,3" FontSize="11" Margin="6,0,0,0" ToolTip="Open chain certificate in Windows Certificate Viewer" />
                                             </Grid>
                                         </StackPanel>
 
