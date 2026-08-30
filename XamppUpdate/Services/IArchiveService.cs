@@ -10,5 +10,6 @@ namespace XamppUpdate.Services
         Task ExtractArchiveAsync(string archiveFilePath, string destinationDirectory, IProgress<string>? progress = null, CancellationToken cancellationToken = default);
         Task CreateZipBackupAsync(string sourceDirectory, string destinationZipFilePath, IProgress<string>? progress = null, CancellationToken cancellationToken = default);
         string FindApacheRoot(string extractedDirectory);
+        string FindPhpRoot(string extractedDirectory);
     }
 }

@@ -45,5 +45,13 @@ namespace XamppUpdate.Models
 
         [ObservableProperty]
         private bool _isBusy;
+
+        public string UpdateButtonText => Type switch
+        {
+            ServiceType.Apache => "Update Apache",
+            ServiceType.Php => "Update PHP",
+            ServiceType.MySql => "Update MySQL",
+            _ => "Update"
+        };
     }
 }

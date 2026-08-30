@@ -397,5 +397,99 @@ namespace XamppUpdate.Tests
             Assert.True(certInfo.DaysRemaining > 80 && certInfo.DaysRemaining <= 90);
             Assert.Contains("Valid", certInfo.StatusDisplayText);
         }
+
+        [Fact]
+        public void ArchiveService_FindPhpRoot_LocatesNestedPhpExe()
+        {
+            string baseFolder = Path.Combine(_testTempDir, "extract_php_test_" + Guid.NewGuid().ToString("N"));
+            string nestedPhp = Path.Combine(baseFolder, "php-8.3.10", "ext");
+            Directory.CreateDirectory(nestedPhp);
+            File.WriteAllText(Path.Combine(baseFolder, "php-8.3.10", "php.exe"), "dummy php");
+
+            var archiveService = new ArchiveService();
+            string resolvedRoot = archiveService.FindPhpRoot(baseFolder);
+
+            Assert.Equal(Path.Combine(baseFolder, "php-8.3.10"), resolvedRoot);
+        }
+
+        [Fact]
+        public async Task ConfigDiffService_ComparePhpConfigFiles_DetectsPhpIniAndProduction()
+        {
+            string localPhp = Path.Combine(_testTempDir, "local_php_" + Guid.NewGuid().ToString("N"));
+            string incomingPhp = Path.Combine(_testTempDir, "incoming_php_" + Guid.NewGuid().ToString("N"));
+
+            Directory.CreateDirectory(localPhp);
+            Directory.CreateDirectory(incomingPhp);
+
+            await File.WriteAllTextAsync(Path.Combine(localPhp, "php.ini"), "memory_limit = 256M\nupload_max_filesize = 50M\n");
+            await File.WriteAllTextAsync(Path.Combine(incomingPhp, "php.ini-production"), "memory_limit = 128M\nupload_max_filesize = 2M\n");
+            await File.WriteAllTextAsync(Path.Combine(localPhp, "custom.ini"), "xdebug.mode = debug\n");
+            await File.WriteAllTextAsync(Path.Combine(incomingPhp, "custom.ini"), "xdebug.mode = develop\n");
+
+            var diffService = new ConfigDiffService();
+            var diffs = await diffService.ComparePhpConfigFilesAsync(localPhp, incomingPhp);
+
+            Assert.NotNull(diffs);
+            Assert.Equal(2, diffs.Count);
+
+            var phpIniDiff = diffs.FirstOrDefault(d => d.RelativeFilePath == "php.ini");
+            Assert.NotNull(phpIniDiff);
+            Assert.True(phpIniDiff.HasDifferences);
+            Assert.Equal(Path.Combine(incomingPhp, "php.ini-production"), phpIniDiff.IncomingFilePath);
+
+            var customIniDiff = diffs.FirstOrDefault(d => d.RelativeFilePath == "custom.ini");
+            Assert.NotNull(customIniDiff);
+            Assert.True(customIniDiff.HasDifferences);
+        }
+
+        [Fact]
+        public async Task PhpUpdateService_TestModeSimulation_ExecutesSafely()
+        {
+            string localPhp = Path.Combine(_testTempDir, "php_live_" + Guid.NewGuid().ToString("N"));
+            string incomingPhp = Path.Combine(_testTempDir, "php_new_" + Guid.NewGuid().ToString("N"));
+
+            Directory.CreateDirectory(localPhp);
+            Directory.CreateDirectory(incomingPhp);
+
+            await File.WriteAllTextAsync(Path.Combine(localPhp, "php.exe"), "old php binary");
+            await File.WriteAllTextAsync(Path.Combine(localPhp, "php.ini"), "memory_limit = 512M\n");
+            await File.WriteAllTextAsync(Path.Combine(incomingPhp, "php.exe"), "new php binary");
+            await File.WriteAllTextAsync(Path.Combine(incomingPhp, "php.ini"), "memory_limit = 128M\n");
+
+            var diffService = new ConfigDiffService();
+            var diffs = await diffService.ComparePhpConfigFilesAsync(localPhp, incomingPhp);
+            var primaryDiff = diffs.First();
+            primaryDiff.Resolution = ConfigFileResolution.KeepCurrent;
+
+            var settingsService = new SettingsService();
+            settingsService.CurrentSettings.Php.InstallationPath = localPhp;
+            var serviceManager = new WindowsServiceManager();
+            var versionService = new VersionDetectionService();
+            var archiveService = new ArchiveService();
+
+            var phpUpdateService = new PhpUpdateService(
+                settingsService,
+                serviceManager,
+                versionService,
+                archiveService,
+                diffService);
+
+            var logs = new List<string>();
+            var progress = new Progress<UpdateProgressReport>(r =>
+            {
+                if (!string.IsNullOrEmpty(r.Message)) logs.Add(r.Message);
+            });
+
+            bool success = await phpUpdateService.ExecuteUpdatePipelineAsync(
+                incomingPhp,
+                diffs,
+                isTestMode: true,
+                progress: progress);
+
+            Assert.True(success);
+            Assert.Equal("old php binary", await File.ReadAllTextAsync(Path.Combine(localPhp, "php.exe")));
+            Assert.Equal("memory_limit = 512M\n", await File.ReadAllTextAsync(Path.Combine(localPhp, "php.ini")));
+            Assert.Contains(logs, l => l.Contains("[TEST MODE]"));
+        }
     }
 }

@@ -30,6 +30,7 @@ namespace XamppUpdate.ViewModels
 
         public event Action? RequestOpenSettings;
         public event Action? RequestOpenApacheWizard;
+        public event Action? RequestOpenPhpWizard;
         public event Action? RequestOpenSslManager;
 
         public MainViewModel(
@@ -63,7 +64,7 @@ namespace XamppUpdate.ViewModels
                 StatusText = "Checking..."
             });
 
-            // 2. PHP
+            // 2. PHP (Active)
             Services.Add(new ServiceItem
             {
                 Type = ServiceType.Php,
@@ -71,10 +72,10 @@ namespace XamppUpdate.ViewModels
                 DisplayName = "PHP Hypertext Preprocessor",
                 Description = "Server-side scripting engine",
                 IconGlyph = "🐘",
-                CanUpdate = false,
-                IsUnderConstruction = true,
-                Status = ServiceStatus.UnderConstruction,
-                StatusText = "Under Construction"
+                CanUpdate = true,
+                IsUnderConstruction = false,
+                Status = ServiceStatus.Running,
+                StatusText = "Active"
             });
 
             // 3. MySQL
@@ -209,6 +210,26 @@ namespace XamppUpdate.ViewModels
         public void StartApacheUpdate()
         {
             RequestOpenApacheWizard?.Invoke();
+        }
+
+        [RelayCommand]
+        public void StartPhpUpdate()
+        {
+            RequestOpenPhpWizard?.Invoke();
+        }
+
+        [RelayCommand]
+        public void StartServiceUpdate(ServiceItem? item)
+        {
+            if (item == null) return;
+            if (item.Type == ServiceType.Apache)
+            {
+                StartApacheUpdate();
+            }
+            else if (item.Type == ServiceType.Php)
+            {
+                StartPhpUpdate();
+            }
         }
 
         [RelayCommand]

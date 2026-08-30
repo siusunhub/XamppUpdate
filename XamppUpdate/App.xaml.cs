@@ -15,6 +15,7 @@ namespace XamppUpdate
         private IArchiveService? _archiveService;
         private IConfigDiffService? _configDiffService;
         private IApacheUpdateService? _apacheUpdateService;
+        private IPhpUpdateService? _phpUpdateService;
         private ISslCertificateService? _sslCertificateService;
 
         protected override void OnStartup(StartupEventArgs e)
@@ -55,6 +56,12 @@ namespace XamppUpdate
                 _versionDetectionService,
                 _archiveService,
                 _configDiffService);
+            _phpUpdateService = new PhpUpdateService(
+                _settingsService,
+                _serviceManager,
+                _versionDetectionService,
+                _archiveService,
+                _configDiffService);
 
             // Ensure folders
             EnsureAppDirectories();
@@ -66,6 +73,7 @@ namespace XamppUpdate
                 mainViewModel,
                 () => new SettingsViewModel(_settingsService),
                 () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService),
+                () => new PhpWizardViewModel(_phpUpdateService, _settingsService, _versionDetectionService),
                 () => new SslManagerViewModel(_sslCertificateService, _settingsService, _serviceManager));
 
             MainWindow = mainWindow;

@@ -232,5 +232,44 @@ namespace XamppUpdate.Services
 
             return extractedDirectory;
         }
+
+        public string FindPhpRoot(string extractedDirectory)
+        {
+            if (!Directory.Exists(extractedDirectory))
+            {
+                return extractedDirectory;
+            }
+
+            // Case 1: Direct root contains php.exe
+            if (File.Exists(Path.Combine(extractedDirectory, "php.exe")))
+            {
+                return extractedDirectory;
+            }
+
+            // Case 2: Subfolder contains php.exe (e.g. php-8.x.x, php, etc.)
+            var subDirs = Directory.GetDirectories(extractedDirectory);
+            foreach (var dir in subDirs)
+            {
+                if (File.Exists(Path.Combine(dir, "php.exe")))
+                {
+                    return dir;
+                }
+            }
+
+            // Case 3: Check 2 levels deep
+            foreach (var dir in subDirs)
+            {
+                var secondLevel = Directory.GetDirectories(dir);
+                foreach (var sub2 in secondLevel)
+                {
+                    if (File.Exists(Path.Combine(sub2, "php.exe")))
+                    {
+                        return sub2;
+                    }
+                }
+            }
+
+            return extractedDirectory;
+        }
     }
 }

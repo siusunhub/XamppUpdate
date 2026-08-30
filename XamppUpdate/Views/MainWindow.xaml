@@ -148,11 +148,12 @@
                                                 Padding="14,8"
                                                 ToolTip="Manage, inspect, and update SSL certificates" />
 
-                                        <!-- Active Apache Update Button -->
+                                        <!-- Active Service Update Button (Apache & PHP) -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
-                                                Content="Update Apache"
+                                                Content="{Binding UpdateButtonText}"
                                                 Visibility="{Binding CanUpdate, Converter={StaticResource BoolToVisConverter}}"
-                                                Command="{Binding DataContext.StartApacheUpdateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                Command="{Binding DataContext.StartServiceUpdateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
                                                 Padding="16,8" />
 
                                         <!-- Under Construction Disabled Button -->

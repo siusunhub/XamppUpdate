@@ -93,6 +93,79 @@ namespace XamppUpdate.Services
             return results;
         }
 
+        public async Task<List<ConfigDiffItem>> ComparePhpConfigFilesAsync(string localPhpRoot, string incomingPhpRoot)
+        {
+            var results = new List<ConfigDiffItem>();
+            var processedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // 1. Primary Required File: php.ini
+            string localPhpIni = Path.Combine(localPhpRoot, "php.ini");
+            string incomingPhpIni = Path.Combine(incomingPhpRoot, "php.ini");
+
+            // If incoming has no php.ini, check php.ini-production or php.ini-development
+            if (!File.Exists(incomingPhpIni))
+            {
+                string prodIni = Path.Combine(incomingPhpRoot, "php.ini-production");
+                string devIni = Path.Combine(incomingPhpRoot, "php.ini-development");
+                if (File.Exists(prodIni))
+                {
+                    incomingPhpIni = prodIni;
+                }
+                else if (File.Exists(devIni))
+                {
+                    incomingPhpIni = devIni;
+                }
+            }
+
+            var primaryDiff = await CompareSingleFileAsync(localPhpIni, incomingPhpIni, "php.ini");
+            results.Add(primaryDiff);
+            processedPaths.Add("php.ini");
+            processedPaths.Add(Path.GetFileName(incomingPhpIni));
+
+            // 2. Discover any other .ini files in local or incoming
+            var discoveredInis = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void ScanIniDir(string rootDir)
+            {
+                if (Directory.Exists(rootDir))
+                {
+                    try
+                    {
+                        foreach (var file in Directory.EnumerateFiles(rootDir, "*.ini", SearchOption.AllDirectories))
+                        {
+                            string rel = Path.GetRelativePath(rootDir, file);
+                            discoveredInis.Add(NormalizeRelativePath(rel));
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            ScanIniDir(localPhpRoot);
+            ScanIniDir(incomingPhpRoot);
+
+            var otherInis = discoveredInis
+                .Where(p => !processedPaths.Contains(p) &&
+                            !p.Equals("php.ini-development", StringComparison.OrdinalIgnoreCase) &&
+                            !p.Equals("php.ini-production", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var otherPath in otherInis)
+            {
+                string localPath = Path.Combine(localPhpRoot, otherPath.Replace('/', Path.DirectorySeparatorChar));
+                string incomingPath = Path.Combine(incomingPhpRoot, otherPath.Replace('/', Path.DirectorySeparatorChar));
+
+                var diffItem = await CompareSingleFileAsync(localPath, incomingPath, otherPath);
+                if (diffItem.HasDifferences)
+                {
+                    results.Add(diffItem);
+                }
+            }
+
+            return results;
+        }
+
         private static string NormalizeRelativePath(string relativePath)
         {
             return relativePath.Replace('\\', '/').TrimStart('/');
