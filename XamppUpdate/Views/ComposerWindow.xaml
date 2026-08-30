@@ -87,9 +87,9 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Download Target Path (for backup retention) -->
+                        <!-- Download Target Path -->
                         <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                            <TextBlock Text="Download Target Directory (Archive / Backup Retention):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,3" />
+                            <TextBlock Text="Download Target Directory (Packages &amp; Libraries Folder / composer.json):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,3" />
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -100,9 +100,9 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- WWW Target Path (real folder for web access) -->
+                        <!-- WWW Target Path -->
                         <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                            <TextBlock Text="WWW Target Directory (Real Folder for Web Access / composer.json):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,3" />
+                            <TextBlock Text="WWW Target Directory (Web Production Folder):" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,3" />
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -159,7 +159,7 @@
 
                     <StackPanel Grid.Row="0">
                         <TextBlock Text="2. Check New Components" FontWeight="Bold" FontSize="13.5" Foreground="{StaticResource TextPrimaryBrush}" />
-                        <TextBlock Text="Scans installed packages against Packagist and lists available newer versions."
+                        <TextBlock Text="Runs 'composer outdated' in Download Target Directory to inspect packages for newer versions."
                                    FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,12" />
                     </StackPanel>
 
@@ -187,7 +187,7 @@
                                 <TextBlock Text="📦 Auto-Backups vendor/" FontSize="10" FontWeight="Bold" Foreground="#15803D" />
                             </Border>
                         </Grid>
-                        <TextBlock Text="Updates project packages and dependencies in the selected working directory."
+                        <TextBlock Text="Runs 'composer update' in Download Target Directory to update project libraries."
                                    FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,8" />
 
                         <!-- Test Mode Dry-Run Option -->

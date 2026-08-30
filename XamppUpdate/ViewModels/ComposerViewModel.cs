@@ -162,15 +162,22 @@ namespace XamppUpdate.ViewModels
         {
             if (IsBusy) return;
 
-            string targetDir = !string.IsNullOrWhiteSpace(WwwTargetPath) && Directory.Exists(WwwTargetPath)
-                ? WwwTargetPath
-                : DownloadTargetPath;
+            string targetDir = !string.IsNullOrWhiteSpace(DownloadTargetPath)
+                ? DownloadTargetPath
+                : WwwTargetPath;
 
             PrepareExecution($"Check New Components (composer outdated in {targetDir})");
             var progress = CreateProgressReporter();
 
             try
             {
+                if (string.IsNullOrWhiteSpace(targetDir) || !Directory.Exists(targetDir))
+                {
+                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [ERROR] Target directory does not exist: '{targetDir}'. Please select a valid Download Target Directory.");
+                    StatusMessage = "Directory not found.";
+                    return;
+                }
+
                 bool success = await _composerService.RunCheckOutdatedAsync(ComposerExecutablePath, targetDir, progress, _cts!.Token);
                 StatusMessage = success ? "Component inspection completed." : "Component inspection finished with warnings/errors.";
             }
@@ -190,23 +197,30 @@ namespace XamppUpdate.ViewModels
         {
             if (IsBusy) return;
 
-            string targetDir = !string.IsNullOrWhiteSpace(WwwTargetPath) && Directory.Exists(WwwTargetPath)
-                ? WwwTargetPath
-                : DownloadTargetPath;
+            string targetDir = !string.IsNullOrWhiteSpace(DownloadTargetPath)
+                ? DownloadTargetPath
+                : WwwTargetPath;
 
             string opName = IsTestMode
                 ? $"Package Update Simulation (dry-run in {targetDir})"
-                : $"Live Package Update in {targetDir} & Vendor Backup to {DownloadTargetPath}";
+                : $"Live Package Update in {targetDir} & Auto-Backup vendor/";
 
             PrepareExecution(opName);
             var progress = CreateProgressReporter();
 
             try
             {
+                if (string.IsNullOrWhiteSpace(targetDir) || !Directory.Exists(targetDir))
+                {
+                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [ERROR] Target directory does not exist: '{targetDir}'. Please select a valid Download Target Directory.");
+                    StatusMessage = "Directory not found.";
+                    return;
+                }
+
                 bool success = await _composerService.RunUpdatePackagesAsync(
                     ComposerExecutablePath,
                     targetDir,
-                    DownloadTargetPath,
+                    targetDir,
                     IsTestMode,
                     progress,
                     _cts!.Token);
