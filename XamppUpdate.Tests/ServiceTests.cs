@@ -91,6 +91,59 @@ namespace XamppUpdate.Tests
         }
 
         [Fact]
+        public async Task ConfigDiffService_CompareConfigFiles_IncludesRequiredAndDiscoveredDifferences()
+        {
+            string localRoot = Path.Combine(_testTempDir, "local_apache_conf_test");
+            string incomingRoot = Path.Combine(_testTempDir, "incoming_apache_conf_test");
+
+            Directory.CreateDirectory(Path.Combine(localRoot, "conf", "extra"));
+            Directory.CreateDirectory(Path.Combine(incomingRoot, "conf", "extra"));
+
+            // 1. Required files (httpd.conf identical, httpd-ssl.conf different, httpd-xampp.conf only local)
+            await File.WriteAllTextAsync(Path.Combine(localRoot, "conf", "httpd.conf"), "ServerRoot \"C:/xampp/apache\"");
+            await File.WriteAllTextAsync(Path.Combine(incomingRoot, "conf", "httpd.conf"), "ServerRoot \"C:/xampp/apache\"");
+
+            await File.WriteAllTextAsync(Path.Combine(localRoot, "conf", "extra", "httpd-ssl.conf"), "Listen 443");
+            await File.WriteAllTextAsync(Path.Combine(incomingRoot, "conf", "extra", "httpd-ssl.conf"), "Listen 8443");
+
+            await File.WriteAllTextAsync(Path.Combine(localRoot, "conf", "extra", "httpd-xampp.conf"), "# XAMPP local only");
+
+            // 2. Extra .conf files:
+            // httpd-vhosts.conf is DIFFERENT -> should be discovered and added
+            await File.WriteAllTextAsync(Path.Combine(localRoot, "conf", "extra", "httpd-vhosts.conf"), "<VirtualHost *:80>\nServerName myapp.local\n</VirtualHost>");
+            await File.WriteAllTextAsync(Path.Combine(incomingRoot, "conf", "extra", "httpd-vhosts.conf"), "<VirtualHost *:80>\nServerName dummy-host.example.com\n</VirtualHost>");
+
+            // httpd-default.conf is IDENTICAL -> should NOT be added
+            await File.WriteAllTextAsync(Path.Combine(localRoot, "conf", "extra", "httpd-default.conf"), "Timeout 60");
+            await File.WriteAllTextAsync(Path.Combine(incomingRoot, "conf", "extra", "httpd-default.conf"), "Timeout 60");
+
+            var requiredList = new[]
+            {
+                "conf/httpd.conf",
+                "conf/extra/httpd-ssl.conf",
+                "conf/extra/httpd-xampp.conf"
+            };
+
+            var diffService = new ConfigDiffService();
+            var results = await diffService.CompareConfigFilesAsync(localRoot, incomingRoot, requiredList);
+
+            var resultPaths = results.Select(r => r.RelativeFilePath.Replace('\\', '/')).ToList();
+
+            // The 3 required files MUST be present:
+            Assert.Contains("conf/httpd.conf", resultPaths);
+            Assert.Contains("conf/extra/httpd-ssl.conf", resultPaths);
+            Assert.Contains("conf/extra/httpd-xampp.conf", resultPaths);
+
+            // The different file httpd-vhosts.conf MUST be added:
+            Assert.Contains("conf/extra/httpd-vhosts.conf", resultPaths);
+
+            // The identical file httpd-default.conf MUST NOT be added:
+            Assert.DoesNotContain("conf/extra/httpd-default.conf", resultPaths);
+
+            Assert.Equal(4, results.Count);
+        }
+
+        [Fact]
         public void ArchiveService_FindApacheRoot_DetectsNestedFolder()
         {
             string baseFolder = Path.Combine(_testTempDir, "extract_test");

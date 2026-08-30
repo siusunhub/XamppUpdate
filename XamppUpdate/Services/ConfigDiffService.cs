@@ -22,17 +22,80 @@ namespace XamppUpdate.Services
         public async Task<List<ConfigDiffItem>> CompareConfigFilesAsync(string localApacheRoot, string incomingApacheRoot, IEnumerable<string> relativeConfigPaths)
         {
             var results = new List<ConfigDiffItem>();
+            var processedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            // 1. Process Required Files (Must always be shown)
             foreach (var relativePath in relativeConfigPaths)
             {
-                string localPath = Path.Combine(localApacheRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
-                string incomingPath = Path.Combine(incomingApacheRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+                string norm = NormalizeRelativePath(relativePath);
+                if (processedPaths.Add(norm))
+                {
+                    string localPath = Path.Combine(localApacheRoot, norm.Replace('/', Path.DirectorySeparatorChar));
+                    string incomingPath = Path.Combine(incomingApacheRoot, norm.Replace('/', Path.DirectorySeparatorChar));
 
-                var diffItem = await CompareSingleFileAsync(localPath, incomingPath, relativePath);
-                results.Add(diffItem);
+                    var diffItem = await CompareSingleFileAsync(localPath, incomingPath, norm);
+                    results.Add(diffItem);
+                }
+            }
+
+            // 2. Auto-discover all other .conf files in local and incoming conf/ directories
+            var discoveredConfs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void ScanConfDir(string rootDir)
+            {
+                string confFolder = Path.Combine(rootDir, "conf");
+                if (Directory.Exists(confFolder))
+                {
+                    try
+                    {
+                        foreach (var file in Directory.EnumerateFiles(confFolder, "*.conf", SearchOption.AllDirectories))
+                        {
+                            string rel = Path.GetRelativePath(rootDir, file);
+                            discoveredConfs.Add(NormalizeRelativePath(rel));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error scanning conf dir '{confFolder}': {ex.Message}");
+                    }
+                }
+            }
+
+            if (Directory.Exists(localApacheRoot))
+            {
+                ScanConfDir(localApacheRoot);
+            }
+
+            if (Directory.Exists(incomingApacheRoot))
+            {
+                ScanConfDir(incomingApacheRoot);
+            }
+
+            // 3. For any other discovered .conf file, compare and add to pulldown IF contents are different
+            var otherConfs = discoveredConfs
+                .Where(p => !processedPaths.Contains(p))
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var otherPath in otherConfs)
+            {
+                string localPath = Path.Combine(localApacheRoot, otherPath.Replace('/', Path.DirectorySeparatorChar));
+                string incomingPath = Path.Combine(incomingApacheRoot, otherPath.Replace('/', Path.DirectorySeparatorChar));
+
+                var diffItem = await CompareSingleFileAsync(localPath, incomingPath, otherPath);
+
+                if (diffItem.HasDifferences)
+                {
+                    results.Add(diffItem);
+                }
             }
 
             return results;
+        }
+
+        private static string NormalizeRelativePath(string relativePath)
+        {
+            return relativePath.Replace('\\', '/').TrimStart('/');
         }
 
         public async Task<ConfigDiffItem> CompareSingleFileAsync(string localFilePath, string incomingFilePath, string relativeFilePath)
