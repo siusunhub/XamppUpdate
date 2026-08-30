@@ -33,7 +33,19 @@ namespace XamppUpdate.ViewModels
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
+        private string _sourceInstalledVersion = string.Empty;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
         private string _currentInstalledVersion = "Detecting...";
+
+        partial void OnCurrentInstalledVersionChanged(string value)
+        {
+            if (!IsExecuting && !IsCompleted)
+            {
+                SourceInstalledVersion = value;
+            }
+        }
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
@@ -43,12 +55,14 @@ namespace XamppUpdate.ViewModels
         {
             get
             {
-                string fromVer = string.IsNullOrWhiteSpace(CurrentInstalledVersion) || CurrentInstalledVersion == "Detecting..."
-                    ? "Unknown"
-                    : CurrentInstalledVersion;
+                string fromVer = !string.IsNullOrWhiteSpace(SourceInstalledVersion) && SourceInstalledVersion != "Detecting..."
+                    ? SourceInstalledVersion
+                    : (string.IsNullOrWhiteSpace(CurrentInstalledVersion) || CurrentInstalledVersion == "Detecting..." ? "Unknown" : CurrentInstalledVersion);
+
                 string toVer = string.IsNullOrWhiteSpace(IncomingDetectedVersion) || IncomingDetectedVersion == "Pending..."
                     ? "Unknown"
                     : IncomingDetectedVersion;
+
                 return $"Update from {fromVer} to {toVer}";
             }
         }
@@ -107,7 +121,13 @@ namespace XamppUpdate.ViewModels
         public async Task LoadCurrentVersionAsync()
         {
             var settings = _settingsService.CurrentSettings;
-            CurrentInstalledVersion = await _versionDetectionService.DetectApacheVersionAsync(settings.Apache.InstallationPath);
+            string detected = await _versionDetectionService.DetectApacheVersionAsync(settings.Apache.InstallationPath);
+            CurrentInstalledVersion = detected;
+
+            if (string.IsNullOrWhiteSpace(SourceInstalledVersion))
+            {
+                SourceInstalledVersion = detected;
+            }
         }
 
         [RelayCommand]

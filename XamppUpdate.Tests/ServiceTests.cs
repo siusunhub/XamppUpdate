@@ -524,5 +524,24 @@ namespace XamppUpdate.Tests
             Assert.Contains("64-bit", info.ArchitectureDisplay);
             Assert.True(info.IsApacheCompatible);
         }
+
+        [Fact]
+        public void PhpWizardViewModel_VersionTransitionDisplay_PreservesBaselineVersion()
+        {
+            var vm = new PhpWizardViewModel(
+                new PhpUpdateService(
+                    new SettingsService(Path.Combine(_testTempDir, "cfg_php.json")),
+                    new WindowsServiceManager(),
+                    new VersionDetectionService(),
+                    new ArchiveService(),
+                    new ConfigDiffService()),
+                new SettingsService(Path.Combine(_testTempDir, "cfg_php2.json")),
+                new VersionDetectionService());
+
+            vm.BaselineInstalledBuild = new PhpBuildInfo { Version = "8.3.30" };
+            vm.IncomingPhpBuild = new PhpBuildInfo { Version = "8.3.33" };
+
+            Assert.Equal("Update PHP from v8.3.30 → v8.3.33", vm.VersionTransitionDisplay);
+        }
     }
 }

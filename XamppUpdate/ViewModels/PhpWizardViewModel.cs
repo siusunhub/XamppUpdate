@@ -35,14 +35,39 @@ namespace XamppUpdate.ViewModels
         [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
         private string _currentInstalledVersion = "Detecting...";
 
+        partial void OnCurrentInstalledVersionChanged(string value)
+        {
+            if (!IsExecuting && !IsCompleted)
+            {
+                BaselineInstalledVersion = value;
+            }
+        }
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
         private string _incomingDetectedVersion = "Pending...";
 
         [ObservableProperty]
-        private PhpBuildInfo? _currentPhpBuild;
+        private string _baselineInstalledVersion = string.Empty;
 
         [ObservableProperty]
+        private PhpBuildInfo? _baselineInstalledBuild;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
+        private PhpBuildInfo? _currentPhpBuild;
+
+        partial void OnCurrentPhpBuildChanged(PhpBuildInfo? value)
+        {
+            if (!IsExecuting && !IsCompleted && value != null)
+            {
+                BaselineInstalledBuild = value;
+                BaselineInstalledVersion = value.Version;
+            }
+        }
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
         private PhpBuildInfo? _incomingPhpBuild;
 
         [ObservableProperty]
@@ -52,15 +77,22 @@ namespace XamppUpdate.ViewModels
         {
             get
             {
-                string fromVer = CurrentPhpBuild != null && !string.IsNullOrWhiteSpace(CurrentPhpBuild.Version) && CurrentPhpBuild.Version != "Unknown"
-                    ? $"PHP {CurrentPhpBuild.FullDisplayString}"
-                    : (string.IsNullOrWhiteSpace(CurrentInstalledVersion) || CurrentInstalledVersion == "Detecting..." ? "Unknown" : CurrentInstalledVersion);
+                string fromVer = BaselineInstalledBuild != null && !string.IsNullOrWhiteSpace(BaselineInstalledBuild.Version) && BaselineInstalledBuild.Version != "Unknown"
+                    ? BaselineInstalledBuild.Version
+                    : (CurrentPhpBuild != null && !string.IsNullOrWhiteSpace(CurrentPhpBuild.Version) && CurrentPhpBuild.Version != "Unknown"
+                        ? CurrentPhpBuild.Version
+                        : "Current");
 
                 string toVer = IncomingPhpBuild != null && !string.IsNullOrWhiteSpace(IncomingPhpBuild.Version) && IncomingPhpBuild.Version != "Unknown"
-                    ? $"PHP {IncomingPhpBuild.FullDisplayString}"
-                    : (string.IsNullOrWhiteSpace(IncomingDetectedVersion) || IncomingDetectedVersion == "Pending..." ? "Unknown" : IncomingDetectedVersion);
+                    ? IncomingPhpBuild.Version
+                    : (string.IsNullOrWhiteSpace(IncomingDetectedVersion) || IncomingDetectedVersion == "Pending..." ? "Target" : IncomingDetectedVersion);
 
-                return $"Update from {fromVer} to {toVer}";
+                if (fromVer == toVer && IsCompleted && IsSuccess && !IsTestMode)
+                {
+                    return $"PHP successfully updated to v{toVer}";
+                }
+
+                return $"Update PHP from v{fromVer} → v{toVer}";
             }
         }
 
@@ -118,8 +150,16 @@ namespace XamppUpdate.ViewModels
         public async Task LoadCurrentVersionAsync()
         {
             var settings = _settingsService.CurrentSettings;
-            CurrentPhpBuild = await _versionDetectionService.DetectPhpBuildInfoAsync(settings.Php.InstallationPath);
-            CurrentInstalledVersion = CurrentPhpBuild.FullDisplayString;
+            var detected = await _versionDetectionService.DetectPhpBuildInfoAsync(settings.Php.InstallationPath);
+            CurrentPhpBuild = detected;
+            CurrentInstalledVersion = detected.FullDisplayString;
+
+            if (BaselineInstalledBuild == null || string.IsNullOrWhiteSpace(BaselineInstalledVersion))
+            {
+                BaselineInstalledBuild = detected;
+                BaselineInstalledVersion = detected.Version;
+                OnPropertyChanged(nameof(VersionTransitionDisplay));
+            }
         }
 
         [RelayCommand]
