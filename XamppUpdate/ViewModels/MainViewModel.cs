@@ -91,7 +91,7 @@ namespace XamppUpdate.ViewModels
                 StatusText = "Under Construction"
             });
 
-            // 4. SSL Certificate
+            // 4. SSL Certificate (Active)
             Services.Add(new ServiceItem
             {
                 Type = ServiceType.Ssl,
@@ -100,9 +100,10 @@ namespace XamppUpdate.ViewModels
                 Description = "HTTPS cryptographic key pairs and certificates",
                 IconGlyph = "🔒",
                 CanUpdate = false,
-                IsUnderConstruction = true,
-                Status = ServiceStatus.UnderConstruction,
-                StatusText = "Under Construction"
+                CanManageSsl = true,
+                IsUnderConstruction = false,
+                Status = ServiceStatus.Running,
+                StatusText = "Active"
             });
 
             // 5. Composer
@@ -176,8 +177,13 @@ namespace XamppUpdate.ViewModels
                         break;
 
                     case ServiceType.Ssl:
-                        item.InstallPath = settings.Ssl.CertificatesPath;
-                        item.Version = await _versionDetectionService.DetectSslStatusAsync(item.InstallPath);
+                        item.InstallPath = Path.Combine(settings.Apache.InstallationPath, "conf");
+                        item.Version = "SSL / TLS 1.3";
+                        item.Status = ServiceStatus.Running;
+                        item.StatusText = "Active";
+                        item.CanManageSsl = true;
+                        item.CanUpdate = false;
+                        item.IsUnderConstruction = false;
                         break;
 
                     case ServiceType.Composer:

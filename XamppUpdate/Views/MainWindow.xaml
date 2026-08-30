@@ -150,13 +150,13 @@
 
                                     <!-- Action Button -->
                                     <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <!-- Active Apache SSL Button -->
-                                        <Button Style="{StaticResource SecondaryButtonStyle}"
-                                                Content="🔒 SSL Manager"
-                                                Visibility="{Binding CanUpdate, Converter={StaticResource BoolToVisConverter}}"
+                                        <!-- Active SSL Manager Button -->
+                                        <Button Style="{StaticResource PrimaryButtonStyle}"
+                                                Content="🔒 Manage SSL"
+                                                Visibility="{Binding CanManageSsl, Converter={StaticResource BoolToVisConverter}}"
                                                 Command="{Binding DataContext.OpenSslManagerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                Padding="12,8" Margin="0,0,8,0"
-                                                ToolTip="Manage, inspect, and update Apache SSL certificates" />
+                                                Padding="14,8"
+                                                ToolTip="Manage, inspect, and update SSL certificates" />
 
                                         <!-- Active Apache Update Button -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
