@@ -42,6 +42,7 @@
     <!-- Solid Brushes -->
     <SolidColorBrush x:Key="WindowBgBrush" Color="{StaticResource WindowBgColor}" />
     <SolidColorBrush x:Key="SurfaceBgBrush" Color="{StaticResource SurfaceBgColor}" />
+    <SolidColorBrush x:Key="CardBgBrush" Color="{StaticResource SurfaceBgColor}" />
     <SolidColorBrush x:Key="SurfaceSubtleBgBrush" Color="{StaticResource SurfaceSubtleBgColor}" />
     <SolidColorBrush x:Key="SurfaceHoverBgBrush" Color="{StaticResource SurfaceHoverBgColor}" />
 
