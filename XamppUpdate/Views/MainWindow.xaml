@@ -107,11 +107,11 @@
                             <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,0,12">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="48" />
-                                        <ColumnDefinition Width="2.2*" />
-                                        <ColumnDefinition Width="1.4*" />
-                                        <ColumnDefinition Width="1.5*" />
-                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="160" />
+                                        <ColumnDefinition Width="150" />
                                     </Grid.ColumnDefinitions>
 
                                     <!-- Service Icon -->
@@ -139,10 +139,11 @@
                                     </StackPanel>
 
                                     <!-- Action Button -->
-                                    <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                         <!-- Active SSL Manager Button -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                                 Content="🔒 Manage SSL"
+                                                MinWidth="135" HorizontalContentAlignment="Center"
                                                 Visibility="{Binding CanManageSsl, Converter={StaticResource BoolToVisConverter}}"
                                                 Command="{Binding DataContext.OpenSslManagerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 Padding="14,8"
@@ -151,6 +152,7 @@
                                         <!-- Active Service Update Button (Apache & PHP) -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                                 Content="{Binding UpdateButtonText}"
+                                                MinWidth="135" HorizontalContentAlignment="Center"
                                                 Visibility="{Binding CanUpdate, Converter={StaticResource BoolToVisConverter}}"
                                                 Command="{Binding DataContext.StartServiceUpdateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}"
@@ -159,6 +161,7 @@
                                         <!-- Under Construction Disabled Button -->
                                         <Button Style="{StaticResource SecondaryButtonStyle}"
                                                 Content="Coming Soon"
+                                                MinWidth="135" HorizontalContentAlignment="Center"
                                                 IsEnabled="False"
                                                 Visibility="{Binding IsUnderConstruction, Converter={StaticResource BoolToVisConverter}}"
                                                 Padding="16,8" />
