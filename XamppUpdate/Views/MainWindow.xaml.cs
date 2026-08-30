@@ -35,6 +35,7 @@ namespace XamppUpdate.Views
             _viewModel.RequestOpenSslManager += OnOpenSslManager;
 
             Loaded += async (_, _) => await _viewModel.RefreshStatusesAsync();
+            Closed += (_, _) => Application.Current.Shutdown();
         }
 
         private void OnOpenSettings()

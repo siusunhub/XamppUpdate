@@ -21,6 +21,7 @@ namespace XamppUpdate
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
 
             // Register global exception handlers
             DispatcherUnhandledException += (s, args) =>
@@ -95,6 +96,12 @@ namespace XamppUpdate
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to create app directories: {ex.Message}");
             }
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            base.OnExit(e);
+            Environment.Exit(0);
         }
     }
 }

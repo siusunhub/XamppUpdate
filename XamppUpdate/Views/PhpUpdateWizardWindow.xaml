@@ -400,13 +400,16 @@
                     </Grid>
                 </Border>
 
-                <!-- Execution Terminal Logs -->
-                <Border Grid.Row="1" Background="{StaticResource CardBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,12">
+                <!-- Execution Log Console -->
+                <Border Grid.Row="1" Background="{StaticResource SurfaceSubtleBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,12">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="Execution Log Feed:" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
+                        <TextBlock DockPanel.Dock="Top" Text="EXECUTION LOG" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
                         <ListBox ItemsSource="{Binding ExecutionLogs}"
-                                 Style="{StaticResource TerminalListBoxStyle}"
-                                 FontFamily="Consolas, Cascadia Code, monospace" FontSize="11.5" />
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Foreground="{StaticResource TextPrimaryBrush}"
+                                 FontFamily="Consolas, Cascadia Code, Courier New"
+                                 FontSize="12" />
                     </DockPanel>
                 </Border>
 
