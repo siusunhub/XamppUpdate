@@ -32,6 +32,9 @@ namespace XamppUpdate.Models
         private bool _canManageSsl;
 
         [ObservableProperty]
+        private bool _canManageComposer;
+
+        [ObservableProperty]
         private bool _isUnderConstruction;
 
         [ObservableProperty]

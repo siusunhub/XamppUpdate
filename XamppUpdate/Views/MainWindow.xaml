@@ -133,6 +133,15 @@
                                                 Padding="14,8"
                                                 ToolTip="Manage, inspect, and update SSL certificates" />
 
+                                        <!-- Active Composer Manager Button -->
+                                        <Button Style="{StaticResource PrimaryButtonStyle}"
+                                                Content="📦 Manage Composer"
+                                                MinWidth="135" HorizontalContentAlignment="Center"
+                                                Visibility="{Binding CanManageComposer, Converter={StaticResource BoolToVisConverter}}"
+                                                Command="{Binding DataContext.OpenComposerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                Padding="14,8"
+                                                ToolTip="Manage Composer, run self-update, check outdated packages, and update libraries" />
+
                                         <!-- Active Service Update Button (Apache & PHP) -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                                 Content="{Binding UpdateButtonText}"

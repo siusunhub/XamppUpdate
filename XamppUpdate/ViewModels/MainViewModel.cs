@@ -116,7 +116,8 @@ namespace XamppUpdate.ViewModels
                 DisplayName = "Composer Dependency Manager",
                 Description = "PHP package dependency manager executable",
                 IconGlyph = "📦",
-                CanUpdate = true,
+                CanManageComposer = true,
+                CanUpdate = false,
                 IsUnderConstruction = false,
                 Status = ServiceStatus.Running,
                 StatusText = "Active"
@@ -182,7 +183,8 @@ namespace XamppUpdate.ViewModels
                     case ServiceType.Composer:
                         item.InstallPath = settings.Composer.ExecutablePath;
                         item.Version = await _versionDetectionService.DetectComposerVersionAsync(item.InstallPath);
-                        item.CanUpdate = true;
+                        item.CanManageComposer = true;
+                        item.CanUpdate = false;
                         item.IsUnderConstruction = false;
                         item.Status = ServiceStatus.Running;
                         item.StatusText = "Active";
@@ -216,6 +218,12 @@ namespace XamppUpdate.ViewModels
 
         [RelayCommand]
         public void StartComposerManagement()
+        {
+            RequestOpenComposer?.Invoke();
+        }
+
+        [RelayCommand]
+        public void OpenComposer()
         {
             RequestOpenComposer?.Invoke();
         }
