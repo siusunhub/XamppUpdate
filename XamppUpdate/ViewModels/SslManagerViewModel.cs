@@ -40,6 +40,9 @@ namespace XamppUpdate.ViewModels
         [ObservableProperty]
         private int _problemCount;
 
+        [ObservableProperty]
+        private bool _hasCertificates;
+
         // In-place Certificate Update Panel properties
         [ObservableProperty]
         private bool _isUpdatePanelOpen;
@@ -103,6 +106,7 @@ namespace XamppUpdate.ViewModels
                 }
 
                 TotalCount = Certificates.Count;
+                HasCertificates = TotalCount > 0;
                 HealthyCount = Certificates.Count(c => c.Status == SslCertificateStatus.Valid);
                 ExpiringSoonCount = Certificates.Count(c => c.Status == SslCertificateStatus.ExpiringSoon);
                 ProblemCount = Certificates.Count(c => c.Status == SslCertificateStatus.Expired || c.Status == SslCertificateStatus.FileNotFound || c.Status == SslCertificateStatus.ParseError);

@@ -12,7 +12,28 @@ namespace XamppUpdate.Converters
 
         public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
-            bool val = value is bool b && b;
+            bool val = false;
+            if (value is bool b)
+            {
+                val = b;
+            }
+            else if (value is int i)
+            {
+                val = i > 0;
+            }
+            else if (value is long l)
+            {
+                val = l > 0;
+            }
+            else if (value is string s)
+            {
+                val = !string.IsNullOrWhiteSpace(s);
+            }
+            else if (value != null)
+            {
+                val = true;
+            }
+
             if (Invert) val = !val;
             return val ? Visibility.Visible : Visibility.Collapsed;
         }

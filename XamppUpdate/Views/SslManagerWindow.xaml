@@ -109,7 +109,7 @@
 
             <!-- Empty State -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="560" Margin="24"
-                        Visibility="{Binding Certificates.Count, Converter={StaticResource InverseBoolToVisConverter}}">
+                        Visibility="{Binding HasCertificates, Converter={StaticResource InverseBoolToVisConverter}}">
                 <Border Background="#F0F9FF" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="10" Padding="20">
                     <StackPanel>
                         <TextBlock Text="ℹ️ No Active SSL Certificates Detected" FontSize="14.5" FontWeight="Bold" Foreground="#0369A1" Margin="0,0,0,8" />
@@ -124,7 +124,7 @@
 
             <!-- Certificates List -->
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,16"
-                          Visibility="{Binding Certificates.Count, Converter={StaticResource BoolToVisConverter}}">
+                          Visibility="{Binding HasCertificates, Converter={StaticResource BoolToVisConverter}}">
                 <ItemsControl ItemsSource="{Binding Certificates}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
