@@ -238,82 +238,160 @@
                     </Grid>
                 </Border>
 
-                <!-- Diff Workspace (Left: Files List, Right: Side-by-side Diff Viewer) -->
-                <Grid Grid.Row="1">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="240" />
-                        <ColumnDefinition Width="12" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+                <!-- Diff Workspace: 100% Full Width with Top Pulldown Selector -->
+                <Border Grid.Row="1" Style="{StaticResource CardBorderStyle}" Padding="0" ClipToBounds="True">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <!-- Top Bar: Target Config File Selector Pulldown -->
+                            <RowDefinition Height="Auto" />
+                            <!-- Diff Viewer Area: 100% Full Width -->
+                            <RowDefinition Height="*" />
+                            <!-- File Action Selector -->
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                    <!-- Left: Config Files List -->
-                    <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="10">
-                        <DockPanel>
-                            <TextBlock DockPanel.Dock="Top" Text="TARGET CONFIG FILES" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" Margin="4,2,4,8" />
-                            <ListBox ItemsSource="{Binding DiffItems}"
-                                     SelectedItem="{Binding SelectedDiffItem}"
-                                     BorderThickness="0"
-                                     Background="Transparent">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Padding="8,8" Margin="0,2" CornerRadius="6" Background="{StaticResource SurfaceSubtleBgBrush}">
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding RelativeFilePath}" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding SummaryText}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </DockPanel>
-                    </Border>
+                        <!-- Top Bar: Pulldown Selector -->
+                        <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="14,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                    <!-- Right: Diff Viewer & Resolution Picker -->
-                    <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}" Padding="0" ClipToBounds="True">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <!-- Diff Viewer Area -->
-                                <RowDefinition Height="*" />
-                                <!-- File Action Selector -->
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Text="TARGET CONFIG FILE:" FontWeight="Bold" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
 
-                            <!-- Side-by-Side Diff UserControl -->
-                            <controls:SideBySideDiffViewer Grid.Row="0" DiffItem="{Binding SelectedDiffItem}" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding DiffItems}"
+                                          SelectedItem="{Binding SelectedDiffItem}"
+                                          Height="34"
+                                          FontSize="13"
+                                          VerticalContentAlignment="Center"
+                                          Background="#FFFFFF"
+                                          BorderBrush="{StaticResource BorderBrush}"
+                                          BorderThickness="1"
+                                          Padding="8,3"
+                                          Cursor="Hand"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBox.ItemContainerStyle>
+                                        <Style TargetType="ComboBoxItem">
+                                            <Setter Property="Padding" Value="8,5" />
+                                            <Setter Property="Cursor" Value="Hand" />
+                                            <Setter Property="BorderThickness" Value="0" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ComboBoxItem">
+                                                        <Border x:Name="ItemBorder"
+                                                                Background="Transparent"
+                                                                CornerRadius="6"
+                                                                Margin="2,1"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="ItemBorder" Property="Background" Value="#F1F5F9" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="ItemBorder" Property="Background" Value="#E0F2FE" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ComboBox.ItemContainerStyle>
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="2,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="📄 " FontSize="12" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding RelativeFilePath}" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="4,0,16,0" />
+                                                <Border Grid.Column="2" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#F1F5F9" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasDifferences}" Value="True">
+                                                                    <Setter Property="Background" Value="#FEF3C7" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsCustomMerged}" Value="True">
+                                                                    <Setter Property="Background" Value="#DCFCE7" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding SummaryText}" FontSize="11" FontWeight="SemiBold">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="#64748B" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding HasDifferences}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#B45309" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsCustomMerged}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#15803D" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
 
-                            <!-- Per-File Resolution Selector -->
-                            <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="16,12">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                                    <Border Background="#EEF2F6" CornerRadius="4" Padding="8,3">
+                                        <TextBlock Text="{Binding DiffItems.Count, StringFormat='{}{0} files'}"
+                                                   FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" FontWeight="SemiBold" />
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
 
-                                    <TextBlock Grid.Column="0" Text="Config Resolution for this file:" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                        <!-- Side-by-Side Diff UserControl (100% Full Width!) -->
+                        <controls:SideBySideDiffViewer Grid.Row="1" DiffItem="{Binding SelectedDiffItem}" />
 
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <RadioButton Style="{StaticResource ModernRadioButtonStyle}"
-                                                     Content="Preserve Current Local (Recommended)"
-                                                     IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=KeepCurrent}"
-                                                     FontWeight="SemiBold"
-                                                     Margin="0,0,16,0" />
+                        <!-- Per-File Resolution Selector -->
+                        <Border Grid.Row="2" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="16,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
 
-                                        <RadioButton Style="{StaticResource ModernRadioButtonStyle}"
-                                                     Content="Overwrite with Incoming Default"
-                                                     IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=OverwriteWithNew}"
-                                                     FontWeight="SemiBold"
-                                                     Margin="0,0,16,0" />
+                                <TextBlock Grid.Column="0" Text="Config Resolution for this file:" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,16,0" />
 
-                                        <RadioButton Style="{StaticResource ModernRadioButtonStyle}"
-                                                     Content="Use Custom Merged / Edited"
-                                                     IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=UseMerged}"
-                                                     FontWeight="SemiBold" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                        </Grid>
-                    </Border>
-                </Grid>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <RadioButton Style="{StaticResource ModernRadioButtonStyle}"
+                                                 Content="Preserve Current Local (Recommended)"
+                                                 IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=KeepCurrent}"
+                                                 FontWeight="SemiBold"
+                                                 Margin="0,0,16,0" />
+
+                                    <RadioButton Style="{StaticResource ModernRadioButtonStyle}"
+                                                 Content="Overwrite with Incoming Default"
+                                                 IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=OverwriteWithNew}"
+                                                 FontWeight="SemiBold"
+                                                 Margin="0,0,16,0" />
+
+                                    <RadioButton Style="{StaticResource ModernRadioButtonStyle}"
+                                                 Content="Use Custom Merged / Edited"
+                                                 IsChecked="{Binding SelectedDiffItem.Resolution, Converter={StaticResource ResolutionToBoolConverter}, ConverterParameter=UseMerged}"
+                                                 FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
 
                 <!-- Step 2 Navigation Buttons -->
                 <Grid Grid.Row="2" Margin="0,12,0,0">
