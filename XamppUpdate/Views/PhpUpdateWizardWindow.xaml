@@ -211,7 +211,7 @@
                                             Padding="14,8" Margin="6,0,0,0" />
                                 </Grid>
 
-                                <!-- Windows PHP Help Banner -->
+                                <!-- Official PHP Help Banner -->
                                 <Border Background="{StaticResource SurfaceBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -220,21 +220,14 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                             <TextBlock Text="Recommended PHP Build for XAMPP (Apache)" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource TextPrimaryBrush}" />
-                                            <TextBlock Text="Download the VS16/VS17 x64 Thread Safe (TS) zip package from windows.php.net."
+                                            <TextBlock Text="Get the official Thread Safe (TS) x64 PHP releases from php.net."
                                                        FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Style="{StaticResource SecondaryButtonStyle}"
-                                                    Content="🌐 php.net"
-                                                    Command="{Binding OpenPhpOfficialUrlCommand}"
-                                                    Padding="12,6" Margin="0,0,6,0"
-                                                    ToolTip="Visit the official PHP website (https://www.php.net)" />
-                                            <Button Style="{StaticResource SecondaryButtonStyle}"
-                                                    Content="📥 windows.php.net"
-                                                    Command="{Binding OpenPhpDownloadUrlCommand}"
-                                                    Padding="12,6"
-                                                    ToolTip="Download Windows PHP binaries (https://windows.php.net/download/)" />
-                                        </StackPanel>
+                                        <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="🌐 Open https://www.php.net"
+                                                Command="{Binding OpenPhpOfficialUrlCommand}"
+                                                Padding="14,8" VerticalAlignment="Center"
+                                                ToolTip="Visit https://www.php.net" />
                                     </Grid>
                                 </Border>
 
