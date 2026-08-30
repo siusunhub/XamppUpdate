@@ -177,18 +177,38 @@ namespace XamppUpdate.Services
                 StepTitle = $"{modeTag}Creating Full Backup",
                 Message = $"{modeTag}Backing up active Apache directory to {Path.GetFileName(backupZipPath)}...",
                 Percentage = 15,
-                IsIndeterminate = true
+                IsIndeterminate = false
             });
 
             var backupProgress = new Progress<string>(msg =>
             {
+                int pct = 20;
+                if (msg.Contains('(') && msg.Contains('/'))
+                {
+                    try
+                    {
+                        int start = msg.IndexOf('(') + 1;
+                        int slash = msg.IndexOf('/', start);
+                        int end = msg.IndexOf(' ', slash);
+                        if (start > 0 && slash > start && end > slash)
+                        {
+                            if (int.TryParse(msg[start..slash], out int cur) &&
+                                int.TryParse(msg[(slash + 1)..end], out int tot) && tot > 0)
+                            {
+                                pct = 15 + (int)(10.0 * cur / tot);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
                 progress?.Report(new UpdateProgressReport
                 {
                     Step = UpdateStep.BackupCreation,
                     StepTitle = $"{modeTag}Creating Full Backup",
                     Message = $"{modeTag}{msg}",
-                    Percentage = 20,
-                    IsIndeterminate = true
+                    Percentage = pct,
+                    IsIndeterminate = false
                 });
             });
 
