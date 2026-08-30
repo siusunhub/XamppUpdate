@@ -54,7 +54,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Actions: Refresh, SSL & Settings -->
+                <!-- Actions: Refresh & Settings -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Style="{StaticResource SecondaryButtonStyle}"
                             Command="{Binding RefreshStatusCommand}"
@@ -63,16 +63,6 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔄" Margin="0,0,6,0" />
                             <TextBlock Text="Refresh Status" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Style="{StaticResource SecondaryButtonStyle}"
-                            Command="{Binding OpenSslManagerCommand}"
-                            Padding="14,8" Margin="0,0,10,0"
-                            ToolTip="Inspect and update Apache SSL certificates">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🔒" Margin="0,0,6,0" />
-                            <TextBlock Text="SSL Certificates" />
                         </StackPanel>
                     </Button>
 
