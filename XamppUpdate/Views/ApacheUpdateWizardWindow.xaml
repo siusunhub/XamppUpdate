@@ -100,7 +100,7 @@
                     </Style>
                 </Grid.Style>
 
-                <StackPanel VerticalAlignment="Top" MaxWidth="800" HorizontalAlignment="Center" Margin="0,20,0,0">
+                <StackPanel VerticalAlignment="Top" Width="800" HorizontalAlignment="Center" Margin="0,20,0,0">
                     <Border Style="{StaticResource CardBorderStyle}" Padding="24">
                         <StackPanel>
                             <TextBlock Text="Step 1: Select Apache Update Source" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,6" />
@@ -171,7 +171,13 @@
 
                             <!-- Progress & Status during Step 1 -->
                             <StackPanel Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisConverter}}" Margin="0,0,0,16">
-                                <TextBlock Text="{Binding StatusMessage}" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource PrimaryAccentBrush}" Margin="0,0,0,6" />
+                                <TextBlock Text="{Binding StatusMessage}"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryAccentBrush}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap"
+                                           Margin="0,0,0,6" />
                                 <ProgressBar Style="{StaticResource ModernProgressBarStyle}"
                                              Value="{Binding ProgressPercentage}"
                                              IsIndeterminate="{Binding IsIndeterminateProgress}" />

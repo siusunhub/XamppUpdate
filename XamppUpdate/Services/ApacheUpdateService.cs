@@ -96,19 +96,39 @@ namespace XamppUpdate.Services
                 Step = UpdateStep.DownloadAndExtract,
                 StepTitle = "Extracting Archive",
                 Message = "Unpacking files into temporary workspace...",
-                Percentage = 45,
-                IsIndeterminate = true
+                Percentage = 40,
+                IsIndeterminate = false
             });
 
             var extractProgress = new Progress<string>(msg =>
             {
+                double pct = 50;
+                if (msg.StartsWith("Extracting (") && msg.Contains('/'))
+                {
+                    try
+                    {
+                        int start = "Extracting (".Length;
+                        int slash = msg.IndexOf('/', start);
+                        int end = msg.IndexOf(')', slash);
+                        if (slash > start && end > slash)
+                        {
+                            if (double.TryParse(msg[start..slash], out double cur) &&
+                                double.TryParse(msg[(slash + 1)..end], out double tot) && tot > 0)
+                            {
+                                pct = 40.0 + (cur / tot * 55.0); // 40% to 95%
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
                 progress?.Report(new UpdateProgressReport
                 {
                     Step = UpdateStep.DownloadAndExtract,
                     StepTitle = "Extracting Archive",
                     Message = msg,
-                    Percentage = 50,
-                    IsIndeterminate = true
+                    Percentage = pct,
+                    IsIndeterminate = false
                 });
             });
 
