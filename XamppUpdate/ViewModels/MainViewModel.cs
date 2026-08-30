@@ -32,6 +32,7 @@ namespace XamppUpdate.ViewModels
         public event Action? RequestOpenApacheWizard;
         public event Action? RequestOpenPhpWizard;
         public event Action? RequestOpenSslManager;
+        public event Action? RequestOpenComposer;
 
         public MainViewModel(
             ISettingsService settingsService,
@@ -43,34 +44,34 @@ namespace XamppUpdate.ViewModels
             _versionDetectionService = versionDetectionService;
 
             _settingsService.SettingsChanged += async (_, _) => await RefreshStatusesAsync();
-            InitializeServicesList();
+            InitializeServices();
         }
 
-        private void InitializeServicesList()
+        private void InitializeServices()
         {
             Services.Clear();
 
-            // 1. Apache (Active)
+            // 1. Apache
             Services.Add(new ServiceItem
             {
                 Type = ServiceType.Apache,
                 Name = "Apache",
                 DisplayName = "Apache HTTP Server",
-                Description = "Primary Web Server (HTTP/HTTPS) daemon",
-                IconGlyph = "🌐",
+                Description = "Core web server executable and modules",
+                IconGlyph = "🪶",
                 CanUpdate = true,
                 IsUnderConstruction = false,
                 Status = ServiceStatus.Unknown,
                 StatusText = "Checking..."
             });
 
-            // 2. PHP (Active)
+            // 2. PHP
             Services.Add(new ServiceItem
             {
                 Type = ServiceType.Php,
                 Name = "PHP",
                 DisplayName = "PHP Hypertext Preprocessor",
-                Description = "Server-side scripting engine",
+                Description = "PHP scripting runtime engine and extensions",
                 IconGlyph = "🐘",
                 CanUpdate = true,
                 IsUnderConstruction = false,
@@ -78,30 +79,30 @@ namespace XamppUpdate.ViewModels
                 StatusText = "Active"
             });
 
-            // 3. MySQL
+            // 3. MySQL / MariaDB
             Services.Add(new ServiceItem
             {
                 Type = ServiceType.MySql,
-                Name = "MySQL / MariaDB",
-                DisplayName = "MySQL Relational Database",
-                Description = "Database management server daemon",
+                Name = "MySQL",
+                DisplayName = "MySQL / MariaDB Database",
+                Description = "Database server daemon and storage engine",
                 IconGlyph = "🐬",
                 CanUpdate = false,
                 IsUnderConstruction = true,
-                Status = ServiceStatus.UnderConstruction,
-                StatusText = "Under Construction"
+                Status = ServiceStatus.Unknown,
+                StatusText = "Checking..."
             });
 
-            // 4. SSL Certificate (Active)
+            // 4. SSL Certificates
             Services.Add(new ServiceItem
             {
                 Type = ServiceType.Ssl,
-                Name = "SSL Certificate",
-                DisplayName = "Local SSL / TLS Certificates",
-                Description = "HTTPS cryptographic key pairs and certificates",
+                Name = "SSL",
+                DisplayName = "SSL / TLS Certificates",
+                Description = "Active server certificate, private key, and chain bundle",
                 IconGlyph = "🔒",
-                CanUpdate = false,
                 CanManageSsl = true,
+                CanUpdate = false,
                 IsUnderConstruction = false,
                 Status = ServiceStatus.Running,
                 StatusText = "Active"
@@ -115,10 +116,10 @@ namespace XamppUpdate.ViewModels
                 DisplayName = "Composer Dependency Manager",
                 Description = "PHP package dependency manager executable",
                 IconGlyph = "📦",
-                CanUpdate = false,
-                IsUnderConstruction = true,
-                Status = ServiceStatus.UnderConstruction,
-                StatusText = "Under Construction"
+                CanUpdate = true,
+                IsUnderConstruction = false,
+                Status = ServiceStatus.Running,
+                StatusText = "Active"
             });
         }
 
@@ -142,33 +143,24 @@ namespace XamppUpdate.ViewModels
                         item.InstallPath = settings.Apache.InstallationPath;
                         item.ServiceName = settings.Apache.ServiceName;
                         item.Version = await _versionDetectionService.DetectApacheVersionAsync(item.InstallPath);
-
-                        if (!Directory.Exists(item.InstallPath))
+                        if (_serviceManager.ServiceExists(item.ServiceName))
                         {
-                            item.Status = ServiceStatus.NotInstalled;
-                            item.StatusText = "Folder Not Found";
+                            var svcStatus = await _serviceManager.GetServiceStatusAsync(item.ServiceName);
+                            item.Status = svcStatus == ServiceControllerStatus.Running ? ServiceStatus.Running : ServiceStatus.Stopped;
+                            item.StatusText = svcStatus.HasValue ? svcStatus.Value.ToString() : "Stopped";
                         }
                         else
                         {
-                            var svcStatus = await _serviceManager.GetServiceStatusAsync(item.ServiceName);
-                            if (svcStatus.HasValue)
-                            {
-                                item.Status = svcStatus.Value == ServiceControllerStatus.Running
-                                    ? ServiceStatus.Running
-                                    : ServiceStatus.Stopped;
-                                item.StatusText = svcStatus.Value.ToString();
-                            }
-                            else
-                            {
-                                item.Status = ServiceStatus.NotInstalled;
-                                item.StatusText = "Service Not Registered";
-                            }
+                            item.Status = ServiceStatus.Stopped;
+                            item.StatusText = "Service Not Installed";
                         }
                         break;
 
                     case ServiceType.Php:
                         item.InstallPath = settings.Php.InstallationPath;
                         item.Version = await _versionDetectionService.DetectPhpVersionAsync(item.InstallPath);
+                        item.Status = ServiceStatus.Running;
+                        item.StatusText = "Active";
                         break;
 
                     case ServiceType.MySql:
@@ -190,6 +182,10 @@ namespace XamppUpdate.ViewModels
                     case ServiceType.Composer:
                         item.InstallPath = settings.Composer.ExecutablePath;
                         item.Version = await _versionDetectionService.DetectComposerVersionAsync(item.InstallPath);
+                        item.CanUpdate = true;
+                        item.IsUnderConstruction = false;
+                        item.Status = ServiceStatus.Running;
+                        item.StatusText = "Active";
                         break;
                 }
 
@@ -219,6 +215,12 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
+        public void StartComposerManagement()
+        {
+            RequestOpenComposer?.Invoke();
+        }
+
+        [RelayCommand]
         public void StartServiceUpdate(ServiceItem? item)
         {
             if (item == null) return;
@@ -229,6 +231,10 @@ namespace XamppUpdate.ViewModels
             else if (item.Type == ServiceType.Php)
             {
                 StartPhpUpdate();
+            }
+            else if (item.Type == ServiceType.Composer)
+            {
+                StartComposerManagement();
             }
         }
 

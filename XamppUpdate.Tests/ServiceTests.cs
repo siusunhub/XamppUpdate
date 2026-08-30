@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 using XamppUpdate.Models;
@@ -526,7 +527,7 @@ namespace XamppUpdate.Tests
         }
 
         [Fact]
-        public void PhpWizardViewModel_VersionTransitionDisplay_PreservesBaselineVersion()
+        public async Task PhpWizardViewModel_VersionTransitionDisplay_PreservesBaselineVersion()
         {
             var vm = new PhpWizardViewModel(
                 new PhpUpdateService(
@@ -538,10 +539,54 @@ namespace XamppUpdate.Tests
                 new SettingsService(Path.Combine(_testTempDir, "cfg_php2.json")),
                 new VersionDetectionService());
 
+            await Task.Delay(100);
             vm.BaselineInstalledBuild = new PhpBuildInfo { Version = "8.3.30" };
             vm.IncomingPhpBuild = new PhpBuildInfo { Version = "8.3.33" };
 
             Assert.Equal("Update PHP from v8.3.30 → v8.3.33", vm.VersionTransitionDisplay);
+        }
+
+        [Fact]
+        public async Task ComposerService_BackupVendorFolder_CreatesZipArchive()
+        {
+            string projectDir = Path.Combine(_testTempDir, "composer_project_" + Guid.NewGuid().ToString("N"));
+            string vendorDir = Path.Combine(projectDir, "vendor", "test_package");
+            Directory.CreateDirectory(vendorDir);
+            await File.WriteAllTextAsync(Path.Combine(vendorDir, "autoload.php"), "<?php // vendor autoload");
+            await File.WriteAllTextAsync(Path.Combine(projectDir, "composer.json"), "{\"name\":\"test/app\"}");
+
+            var settingsService = new SettingsService(Path.Combine(_testTempDir, "comp_cfg.json"));
+            var composerService = new ComposerService(settingsService);
+
+            var logs = new List<string>();
+            var progress = new Progress<string>(l => logs.Add(l));
+
+            string? backupPath = await composerService.BackupVendorFolderAsync(projectDir, progress);
+
+            Assert.NotNull(backupPath);
+            Assert.True(File.Exists(backupPath));
+            Assert.True(new FileInfo(backupPath).Length > 0);
+
+            // Verify zip contains vendor files
+            using var zip = ZipFile.OpenRead(backupPath);
+            Assert.Contains(zip.Entries, e => e.FullName.Contains("autoload.php"));
+        }
+
+        [Fact]
+        public void ComposerViewModel_InitialState_HandlesLogsAndSettings()
+        {
+            var settingsService = new SettingsService(Path.Combine(_testTempDir, "comp_vm_cfg.json"));
+            var composerService = new ComposerService(settingsService);
+
+            var vm = new ComposerViewModel(composerService, settingsService);
+            Assert.NotNull(vm.ExecutionLogs);
+
+            vm.ExecutionLogs.Add("Test log line 1");
+            vm.ExecutionLogs.Add("Test log line 2");
+            Assert.Equal(2, vm.ExecutionLogs.Count);
+
+            vm.ClearLogs();
+            Assert.Empty(vm.ExecutionLogs);
         }
     }
 }

@@ -51,6 +51,7 @@ namespace XamppUpdate.Models
             ServiceType.Apache => "Update Apache",
             ServiceType.Php => "Update PHP",
             ServiceType.MySql => "Update MySQL",
+            ServiceType.Composer => "Manage Composer",
             _ => "Update"
         };
     }

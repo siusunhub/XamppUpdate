@@ -11,13 +11,15 @@ namespace XamppUpdate.Views
         private readonly Func<ApacheWizardViewModel> _apacheWizardVmFactory;
         private readonly Func<PhpWizardViewModel> _phpWizardVmFactory;
         private readonly Func<SslManagerViewModel> _sslManagerVmFactory;
+        private readonly Func<ComposerViewModel> _composerVmFactory;
 
         public MainWindow(
             MainViewModel viewModel,
             Func<SettingsViewModel> settingsVmFactory,
             Func<ApacheWizardViewModel> apacheWizardVmFactory,
             Func<PhpWizardViewModel> phpWizardVmFactory,
-            Func<SslManagerViewModel> sslManagerVmFactory)
+            Func<SslManagerViewModel> sslManagerVmFactory,
+            Func<ComposerViewModel> composerVmFactory)
         {
             InitializeComponent();
             Title = AppInfo.WindowTitle;
@@ -26,6 +28,7 @@ namespace XamppUpdate.Views
             _apacheWizardVmFactory = apacheWizardVmFactory;
             _phpWizardVmFactory = phpWizardVmFactory;
             _sslManagerVmFactory = sslManagerVmFactory;
+            _composerVmFactory = composerVmFactory;
 
             DataContext = _viewModel;
 
@@ -33,6 +36,7 @@ namespace XamppUpdate.Views
             _viewModel.RequestOpenApacheWizard += OnOpenApacheWizard;
             _viewModel.RequestOpenPhpWizard += OnOpenPhpWizard;
             _viewModel.RequestOpenSslManager += OnOpenSslManager;
+            _viewModel.RequestOpenComposer += OnOpenComposer;
 
             Loaded += async (_, _) => await _viewModel.RefreshStatusesAsync();
             Closed += (_, _) => Application.Current.Shutdown();
@@ -78,6 +82,18 @@ namespace XamppUpdate.Views
                 Owner = this
             };
             sslWindow.ShowDialog();
+            _ = _viewModel.RefreshStatusesAsync();
+        }
+
+        private void OnOpenComposer()
+        {
+            var composerVm = _composerVmFactory();
+            var composerWindow = new ComposerWindow(composerVm)
+            {
+                Owner = this
+            };
+            composerWindow.ShowDialog();
+            _ = _viewModel.RefreshStatusesAsync();
         }
     }
 }

@@ -77,9 +77,9 @@ namespace XamppUpdate.ViewModels
         {
             get
             {
-                string fromVer = BaselineInstalledBuild != null && !string.IsNullOrWhiteSpace(BaselineInstalledBuild.Version) && BaselineInstalledBuild.Version != "Unknown"
+                string fromVer = BaselineInstalledBuild != null && !string.IsNullOrWhiteSpace(BaselineInstalledBuild.Version) && BaselineInstalledBuild.Version != "Unknown" && !BaselineInstalledBuild.Version.Contains("Not Installed")
                     ? BaselineInstalledBuild.Version
-                    : (CurrentPhpBuild != null && !string.IsNullOrWhiteSpace(CurrentPhpBuild.Version) && CurrentPhpBuild.Version != "Unknown"
+                    : (CurrentPhpBuild != null && !string.IsNullOrWhiteSpace(CurrentPhpBuild.Version) && CurrentPhpBuild.Version != "Unknown" && !CurrentPhpBuild.Version.Contains("Not Installed")
                         ? CurrentPhpBuild.Version
                         : "Current");
 

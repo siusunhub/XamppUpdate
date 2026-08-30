@@ -17,6 +17,7 @@ namespace XamppUpdate
         private IApacheUpdateService? _apacheUpdateService;
         private IPhpUpdateService? _phpUpdateService;
         private ISslCertificateService? _sslCertificateService;
+        private IComposerService? _composerService;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -51,6 +52,7 @@ namespace XamppUpdate
             _archiveService = new ArchiveService();
             _configDiffService = new ConfigDiffService();
             _sslCertificateService = new SslCertificateService();
+            _composerService = new ComposerService(_settingsService);
             _apacheUpdateService = new ApacheUpdateService(
                 _settingsService,
                 _serviceManager,
@@ -75,7 +77,8 @@ namespace XamppUpdate
                 () => new SettingsViewModel(_settingsService),
                 () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService),
                 () => new PhpWizardViewModel(_phpUpdateService, _settingsService, _versionDetectionService),
-                () => new SslManagerViewModel(_sslCertificateService, _settingsService, _serviceManager));
+                () => new SslManagerViewModel(_sslCertificateService, _settingsService, _serviceManager),
+                () => new ComposerViewModel(_composerService, _settingsService));
 
             MainWindow = mainWindow;
             mainWindow.Show();
