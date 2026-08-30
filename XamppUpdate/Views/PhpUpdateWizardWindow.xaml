@@ -224,7 +224,7 @@
                                                        FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
                                         </StackPanel>
                                         <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}"
-                                                Content="🌐 Open https://www.php.net"
+                                                Content="🌐 Open Download Page"
                                                 Command="{Binding OpenPhpOfficialUrlCommand}"
                                                 Padding="14,8" VerticalAlignment="Center"
                                                 ToolTip="Visit https://www.php.net" />
