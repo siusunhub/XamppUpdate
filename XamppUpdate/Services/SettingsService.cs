@@ -17,7 +17,7 @@ namespace XamppUpdate.Services
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
-        private static readonly SemaphoreSlim _fileLock = new(1, 1);
+        private readonly SemaphoreSlim _fileLock = new(1, 1);
         private readonly string _configFilePath;
         private AppSettings _currentSettings;
 
@@ -131,7 +131,8 @@ namespace XamppUpdate.Services
         public void ResetToDefaults()
         {
             _currentSettings = new AppSettings();
-            _ = SaveSettingsAsync(_currentSettings);
+            SaveSettingsSync(_currentSettings);
+            SettingsChanged?.Invoke(this, _currentSettings);
         }
     }
 }

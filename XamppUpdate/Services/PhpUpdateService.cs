@@ -57,8 +57,7 @@ namespace XamppUpdate.Services
                 }
             }
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string tempBase = Path.Combine(baseDir, _settingsService.CurrentSettings.General.TempDirectory);
+            string tempBase = _settingsService.CurrentSettings.General.ResolvedTempDirectory;
             if (!Directory.Exists(tempBase))
             {
                 Directory.CreateDirectory(tempBase);
@@ -184,6 +183,7 @@ namespace XamppUpdate.Services
             string incomingPhpRoot,
             List<ConfigDiffItem> resolvedConfigs,
             bool isTestMode = false,
+            bool skipBackup = false,
             IProgress<UpdateProgressReport>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -214,37 +214,50 @@ namespace XamppUpdate.Services
             }
 
             // Step 2: Backup Creation
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string backupDir = Path.Combine(baseDir, settings.General.BackupDirectory);
+            string backupDir = settings.General.ResolvedBackupDirectory;
             if (!Directory.Exists(backupDir)) Directory.CreateDirectory(backupDir);
 
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string backupZipPath = Path.Combine(backupDir, $"php_backup_{timestamp}.zip");
 
-            progress?.Report(new UpdateProgressReport
+            if (skipBackup)
             {
-                Step = UpdateStep.BackupCreation,
-                StepTitle = $"{modeTag}Creating Full Backup",
-                Message = $"{modeTag}Archiving existing PHP files to {Path.GetFileName(backupZipPath)}...",
-                Percentage = 15,
-                IsIndeterminate = false
-            });
-
-            var backupProgress = new Progress<string>(msg =>
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.BackupCreation,
+                    StepTitle = "Backup Skipped",
+                    Message = "[BACKUP] Backup skipped by user (simulation backup already verified).",
+                    Percentage = 25,
+                    IsIndeterminate = false
+                });
+            }
+            else
             {
                 progress?.Report(new UpdateProgressReport
                 {
                     Step = UpdateStep.BackupCreation,
                     StepTitle = $"{modeTag}Creating Full Backup",
-                    Message = $"{modeTag}{msg}",
-                    Percentage = 22,
+                    Message = $"{modeTag}Archiving existing PHP files to {Path.GetFileName(backupZipPath)}...",
+                    Percentage = 15,
                     IsIndeterminate = false
                 });
-            });
 
-            if (Directory.Exists(localPhpRoot))
-            {
-                await _archiveService.CreateZipBackupAsync(localPhpRoot, backupZipPath, backupProgress, cancellationToken);
+                var backupProgress = new Progress<string>(msg =>
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.BackupCreation,
+                        StepTitle = $"{modeTag}Creating Full Backup",
+                        Message = $"{modeTag}{msg}",
+                        Percentage = 22,
+                        IsIndeterminate = false
+                    });
+                });
+
+                if (Directory.Exists(localPhpRoot))
+                {
+                    await _archiveService.CreateZipBackupAsync(localPhpRoot, backupZipPath, backupProgress, cancellationToken);
+                }
             }
 
             // Step 3: Stop Apache Service (to release locks on php8apache2_4.dll and extensions)

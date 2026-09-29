@@ -1,7 +1,7 @@
 {
   "General": {
-    "BackupDirectory": "backup",
-    "TempDirectory": "temp",
+    "BackupDirectory": "updatebackup",
+    "TempDirectory": "updatetemp",
     "MaxBackupRetentionCount": 10,
     "AutoCheckUpdatesOnStartup": false
   },
@@ -31,5 +31,9 @@
   "Ssl": {
     "CertificatesPath": "C:\\xampp\\apache\\conf\\ssl.crt",
     "KeysPath": "C:\\xampp\\apache\\conf\\ssl.key"
+  },
+  "PhpMyAdmin": {
+    "InstallationPath": "C:\\xampp\\phpMyAdmin",
+    "ConfigFile": "config.inc.php"
   }
 }

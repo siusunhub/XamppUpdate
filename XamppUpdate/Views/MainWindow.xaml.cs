@@ -10,6 +10,8 @@ namespace XamppUpdate.Views
         private readonly Func<SettingsViewModel> _settingsVmFactory;
         private readonly Func<ApacheWizardViewModel> _apacheWizardVmFactory;
         private readonly Func<PhpWizardViewModel> _phpWizardVmFactory;
+        private readonly Func<MySqlWizardViewModel> _mySqlWizardVmFactory;
+        private readonly Func<PhpMyAdminWizardViewModel> _phpMyAdminWizardVmFactory;
         private readonly Func<SslManagerViewModel> _sslManagerVmFactory;
         private readonly Func<ComposerViewModel> _composerVmFactory;
 
@@ -18,6 +20,8 @@ namespace XamppUpdate.Views
             Func<SettingsViewModel> settingsVmFactory,
             Func<ApacheWizardViewModel> apacheWizardVmFactory,
             Func<PhpWizardViewModel> phpWizardVmFactory,
+            Func<MySqlWizardViewModel> mySqlWizardVmFactory,
+            Func<PhpMyAdminWizardViewModel> phpMyAdminWizardVmFactory,
             Func<SslManagerViewModel> sslManagerVmFactory,
             Func<ComposerViewModel> composerVmFactory)
         {
@@ -27,6 +31,8 @@ namespace XamppUpdate.Views
             _settingsVmFactory = settingsVmFactory;
             _apacheWizardVmFactory = apacheWizardVmFactory;
             _phpWizardVmFactory = phpWizardVmFactory;
+            _mySqlWizardVmFactory = mySqlWizardVmFactory;
+            _phpMyAdminWizardVmFactory = phpMyAdminWizardVmFactory;
             _sslManagerVmFactory = sslManagerVmFactory;
             _composerVmFactory = composerVmFactory;
 
@@ -35,6 +41,8 @@ namespace XamppUpdate.Views
             _viewModel.RequestOpenSettings += OnOpenSettings;
             _viewModel.RequestOpenApacheWizard += OnOpenApacheWizard;
             _viewModel.RequestOpenPhpWizard += OnOpenPhpWizard;
+            _viewModel.RequestOpenMySqlWizard += OnOpenMySqlWizard;
+            _viewModel.RequestOpenPhpMyAdminWizard += OnOpenPhpMyAdminWizard;
             _viewModel.RequestOpenSslManager += OnOpenSslManager;
             _viewModel.RequestOpenComposer += OnOpenComposer;
 
@@ -67,6 +75,28 @@ namespace XamppUpdate.Views
         {
             var wizardVm = _phpWizardVmFactory();
             var wizardWindow = new PhpUpdateWizardWindow(wizardVm)
+            {
+                Owner = this
+            };
+            wizardWindow.ShowDialog();
+            _ = _viewModel.RefreshStatusesAsync();
+        }
+
+        private void OnOpenMySqlWizard()
+        {
+            var wizardVm = _mySqlWizardVmFactory();
+            var wizardWindow = new MySqlUpdateWizardWindow(wizardVm)
+            {
+                Owner = this
+            };
+            wizardWindow.ShowDialog();
+            _ = _viewModel.RefreshStatusesAsync();
+        }
+
+        private void OnOpenPhpMyAdminWizard()
+        {
+            var wizardVm = _phpMyAdminWizardVmFactory();
+            var wizardWindow = new PhpMyAdminUpdateWizardWindow(wizardVm)
             {
                 Owner = this
             };

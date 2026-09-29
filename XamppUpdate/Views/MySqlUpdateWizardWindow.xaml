@@ -1,4 +1,4 @@
-<Window x:Class="XamppUpdate.Views.PhpUpdateWizardWindow"
+<Window x:Class="XamppUpdate.Views.MySqlUpdateWizardWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -6,8 +6,8 @@
         xmlns:controls="clr-namespace:XamppUpdate.Views.Controls"
         xmlns:conv="clr-namespace:XamppUpdate.Converters"
         mc:Ignorable="d"
-        Title="PHP Engine Update Wizard"
-        Height="720" Width="1060"
+        Title="MySQL / MariaDB Database Update Wizard"
+        Height="740" Width="1080"
         MinHeight="600" MinWidth="850"
         WindowStartupLocation="CenterOwner"
         Icon="pack://application:,,,/app.ico"
@@ -40,7 +40,7 @@
 
                 <!-- Title & Version Info -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="PHP Update Pipeline" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                    <TextBlock Text="MySQL / MariaDB Update Pipeline" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
                     <TextBlock Text="{Binding CurrentInstalledVersion, StringFormat='Active Installed Version: {0}'}"
                                FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
                 </StackPanel>
@@ -93,7 +93,7 @@
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <TextBlock Text="2. Config Diff (php.ini)" FontWeight="SemiBold" FontSize="12">
+                        <TextBlock Text="2. Config Diff (bin/my.ini)" FontWeight="SemiBold" FontSize="12">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
@@ -110,7 +110,7 @@
                     <TextBlock Text="→" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,0,6,0" />
 
                     <!-- Step 3 Indicator -->
-                    <Border CornerRadius="14" Padding="12,4">
+                    <Border CornerRadius="14" Padding="12,4" Margin="0,0,6,0">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="{StaticResource CardBgBrush}" />
@@ -124,12 +124,43 @@
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <TextBlock Text="3. Stop Apache &amp; Execute" FontWeight="SemiBold" FontSize="12">
+                        <TextBlock Text="3. Preview &amp; Execute" FontWeight="SemiBold" FontSize="12">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding CurrentStepIndex}" Value="2">
+                                            <Setter Property="Foreground" Value="#FFFFFF" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Border>
+
+                    <TextBlock Text="→" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,0,6,0" />
+
+                    <!-- Step 4 Indicator -->
+                    <Border CornerRadius="14" Padding="12,4">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{StaticResource CardBgBrush}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                                <Setter Property="BorderThickness" Value="1" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentStepIndex}" Value="3">
+                                        <Setter Property="Background" Value="{StaticResource PrimaryAccentBrush}" />
+                                        <Setter Property="BorderBrush" Value="{StaticResource PrimaryAccentBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="4. Database Table Upgrade" FontWeight="SemiBold" FontSize="12">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CurrentStepIndex}" Value="3">
                                             <Setter Property="Foreground" Value="#FFFFFF" />
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -144,7 +175,9 @@
         <!-- Active Step Content Area -->
         <Grid Grid.Row="1" Margin="24,18">
 
-            <!-- ================= STEP 1: SOURCE SELECTION ================= -->
+            <!-- ========================================== -->
+            <!-- STEP 1: SOURCE PACKAGE SELECTION           -->
+            <!-- ========================================== -->
             <Grid>
                 <Grid.Style>
                     <Style TargetType="Grid">
@@ -162,14 +195,14 @@
                         <Border Background="{StaticResource CardBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="28">
                             <StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                                    <TextBlock Text="🐘" FontSize="26" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="🐬" FontSize="26" Margin="0,0,12,0" VerticalAlignment="Center" />
                                     <StackPanel>
-                                        <TextBlock Text="Select PHP Engine Distribution" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
-                                        <TextBlock Text="Select an official PHP for Windows archive (.zip) or pre-extracted folder." FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                                        <TextBlock Text="Select MySQL / MariaDB Database Package" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                        <TextBlock Text="Select an official MySQL or MariaDB distribution archive (.zip or .7z) or provide a download URL." FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
                                     </StackPanel>
                                 </StackPanel>
 
-                                <!-- Active Installed PHP Build Card -->
+                                <!-- Active Installed MySQL/MariaDB Build Card -->
                                 <Border Background="{StaticResource SurfaceSubtleBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -177,21 +210,18 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="Active Installed PHP Build:" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                                            <TextBlock Text="Active Installed Database Engine:" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
                                             <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                                <TextBlock Text="{Binding CurrentPhpBuild.Version, StringFormat='PHP {0}'}" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,10,0" />
-                                                <Border Background="#EEF2F6" CornerRadius="4" Padding="6,2" Margin="0,0,6,0">
-                                                    <TextBlock Text="{Binding CurrentPhpBuild.ArchitectureDisplay}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
-                                                </Border>
-                                                <Border Background="#DCFCE7" CornerRadius="4" Padding="6,2">
-                                                    <TextBlock Text="{Binding CurrentPhpBuild.ThreadSafetyDisplay}" FontSize="11" FontWeight="Bold" Foreground="#15803D" />
+                                                <TextBlock Text="{Binding CurrentInstalledVersion}" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,10,0" />
+                                                <Border Background="#EEF2F6" CornerRadius="4" Padding="6,2">
+                                                    <TextBlock Text="{Binding EngineDisplayName}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
                                                 </Border>
                                             </StackPanel>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
 
-                                <!-- Official PHP Download Link Banner -->
+                                <!-- Quick Download Resources Banner -->
                                 <Border Background="{StaticResource SurfaceBgBrush}"
                                         BorderBrush="{StaticResource BorderBrush}"
                                         BorderThickness="1"
@@ -206,24 +236,23 @@
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="🌐 " FontSize="13" VerticalAlignment="Center" />
-                                                <TextBlock Text="Download Official PHP Win64 (Thread Safe / TS):" FontWeight="SemiBold" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="12.5" VerticalAlignment="Center" />
+                                                <TextBlock Text="Download Official MySQL / MariaDB Win64 Binaries:" FontWeight="SemiBold" Foreground="{StaticResource PrimaryAccentBrush}" FontSize="12.5" VerticalAlignment="Center" />
                                             </StackPanel>
-                                            <TextBlock Text="https://windows.php.net/download/"
-                                                       Foreground="#0369A1"
-                                                       FontSize="12"
-                                                       FontFamily="Consolas, Cascadia Code, Courier New"
-                                                       Margin="0,2,0,0" />
+                                            <TextBlock Text="Official Community / Foundation Windows 64-bit packages"
+                                                       FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
                                         </StackPanel>
-                                        <Button Grid.Column="1"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Command="{Binding OpenPhpOfficialUrlCommand}"
-                                                ToolTip="Visit https://windows.php.net/download/"
-                                                Padding="14,6"
-                                                VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🔗 Open Download Page" FontWeight="SemiBold" FontSize="12" />
-                                            </StackPanel>
-                                        </Button>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                    Content="🐬 MySQL Downloads"
+                                                    Command="{Binding OpenMySqlDownloadUrlCommand}"
+                                                    Visibility="{Binding ShowMySqlDownload, Converter={StaticResource BoolToVisConverter}}"
+                                                    Padding="12,7" Margin="0,0,8,0" FontSize="12" />
+                                            <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                    Content="🌐 MariaDB Downloads"
+                                                    Command="{Binding OpenMariaDbDownloadUrlCommand}"
+                                                    Visibility="{Binding ShowMariaDbDownload, Converter={StaticResource BoolToVisConverter}}"
+                                                    Padding="12,7" FontSize="12" />
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
 
@@ -243,14 +272,10 @@
                                             Margin="10,0,0,0" Padding="14,10" />
                                 </Grid>
 
-                                <!-- Apache Compatibility Warning (if NTS or incompatible) -->
-                                <Border Background="#FEF2F2" BorderBrush="#F87171" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,16"
-                                        Visibility="{Binding IsIncomingCompatibleWithApache, Converter={StaticResource InverseBoolToVisConverter}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="⚠️ " FontSize="14" VerticalAlignment="Center" />
-                                        <TextBlock Text="WARNING: Selected PHP package is Non-Thread Safe (NTS). Apache on Windows requires Thread Safe (TS) PHP. Apache will fail to start if updated with NTS."
-                                                   FontWeight="Bold" Foreground="#B91C1C" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
-                                    </StackPanel>
+                                <!-- Safety Notice -->
+                                <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
+                                    <TextBlock Text="ℹ️ Safety Notice: The data/ folder containing your live database tables will be preserved and migrated directly into the new installation. Dual zip backups (mysql_backup and mysql_data_backup) will be created automatically."
+                                               FontSize="12" Foreground="#1E40AF" TextWrapping="Wrap" />
                                 </Border>
 
                                 <!-- Error Display -->
@@ -259,7 +284,7 @@
                                     <TextBlock Text="{Binding ErrorMessage}" Foreground="#B91C1C" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
                                 </Border>
 
-                                <!-- Fixed-Width Extraction Status Bar (Never resizes the window or parent card) -->
+                                <!-- Extraction Status Bar -->
                                 <Border Background="{StaticResource SurfaceBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,20"
                                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisConverter}}">
                                     <StackPanel>
@@ -271,20 +296,34 @@
                                 </Border>
 
                                 <!-- Action Buttons -->
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Style="{StaticResource PrimaryButtonStyle}"
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Button Grid.Column="0" Style="{StaticResource SecondaryButtonStyle}"
+                                            Content="🛠️ Direct Database Upgrade (Step 4) →"
+                                            Command="{Binding ProceedToStep4Command}"
+                                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
+                                            Padding="14,9" FontSize="12.5" />
+
+                                    <Button Grid.Column="2" Style="{StaticResource PrimaryButtonStyle}"
                                             Content="🔍 Next: Inspect &amp; Compare Configurations →"
-                                            Command="{Binding Step1NextCommand}"
+                                            Command="{Binding ProcessStep1Command}"
                                             IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
                                             Padding="20,10" FontSize="13.5" />
-                                </StackPanel>
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
 
-            <!-- ================= STEP 2: CONFIGURATION DIFF (php.ini) ================= -->
+            <!-- ========================================== -->
+            <!-- STEP 2: CONFIG DIFF & MERGE (bin/my.ini)   -->
+            <!-- ========================================== -->
             <Grid>
                 <Grid.Style>
                     <Style TargetType="Grid">
@@ -303,48 +342,19 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Step 2 Top Bar: Configuration File Pulldown Selector -->
-                <Border Grid.Row="0" Background="{StaticResource SurfaceBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,12">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Step 2: Compare MySQL Configuration (bin/my.ini)" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                        <TextBlock Text="Review the differences between your active my.ini configuration and the incoming default template."
+                                   FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                    </StackPanel>
+                </Grid>
 
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="📄 Target Config File:" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                        </StackPanel>
-
-                        <!-- Pulldown ComboBox -->
-                        <ComboBox Grid.Column="1" ItemsSource="{Binding DiffItems}" SelectedItem="{Binding SelectedDiffItem}"
-                                  FontSize="12.5" Padding="8,5" VerticalAlignment="Center">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding RelativeFilePath}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center" />
-                                        <Border Grid.Column="1" Background="{Binding BadgeBackgroundBrush}"
-                                                CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding SummaryText}" Foreground="{Binding BadgeForegroundBrush}" FontSize="11" FontWeight="Bold" />
-                                        </Border>
-                                    </Grid>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-
-                        <!-- Summary Status -->
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                            <TextBlock Text="{Binding DiffItems.Count, StringFormat='{}{0} config file(s) analyzed'}"
-                                       FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- Side-by-Side Diff Viewer Card -->
+                <!-- Side By Side Diff Viewer Card -->
                 <Border Grid.Row="1" Background="{StaticResource CardBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="0" Margin="0,0,0,12" ClipToBounds="True">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -355,7 +365,7 @@
                         <controls:SideBySideDiffViewer Grid.Row="0" DiffItem="{Binding SelectedDiffItem}" />
 
                         <!-- Empty State if no file selected -->
-                        <TextBlock Grid.Row="0" Text="Select a configuration file from the pulldown menu above to inspect differences."
+                        <TextBlock Grid.Row="0" Text="Comparing bin/my.ini configuration..."
                                    FontSize="13" Foreground="{StaticResource TextMutedBrush}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Visibility="{Binding SelectedDiffItem, Converter={StaticResource InverseBoolToVisConverter}}" />
@@ -406,17 +416,17 @@
 
                     <Button Grid.Column="0" Style="{StaticResource SecondaryButtonStyle}"
                             Content="⬅️ Back to Source"
-                            Command="{Binding Step2BackCommand}"
+                            Command="{Binding GoBackToStep1Command}"
                             Padding="16,8" FontSize="12.5" />
 
                     <Button Grid.Column="2" Style="{StaticResource PrimaryButtonStyle}"
                             Content="📋 Next: Review &amp; Execute Pipeline →"
-                            Command="{Binding Step2NextCommand}"
+                            Command="{Binding ProceedToStep3Command}"
                             Padding="20,10" FontSize="13.5" />
                 </Grid>
             </Grid>
 
-            <!-- ================= STEP 3: EXECUTION & LOGS ================= -->
+            <!-- ================= STEP 3: CONFIRMATION & EXECUTION ================= -->
             <Grid>
                 <Grid.Style>
                     <Style TargetType="Grid">
@@ -450,14 +460,14 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="✓ 1. Automated Full Backup of active PHP directory" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
-                                <TextBlock Text="✓ 2. Graceful Apache Service Stop &amp; Verification" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
-                                <TextBlock Text="✓ 3. Replace PHP Engine Binaries &amp; Extensions" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
+                                <TextBlock Text="✓ 1. Stop Apache &amp; MySQL Windows Services" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
+                                <TextBlock Text="✓ 2. Automated Dual Zip Backup (mysql_backup &amp; mysql_data_backup)" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
+                                <TextBlock Text="✓ 3. Rename MySQL folder (mysql_old) &amp; Deploy New Binaries" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
                             </StackPanel>
                             <StackPanel Grid.Column="1">
-                                <TextBlock Text="✓ 4. Apply configured php.ini choices" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
-                                <TextBlock Text="✓ 5. Restart Apache Service &amp; Verify Status" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
-                                <TextBlock Text="✓ 6. Cleanup Temporary Workspace Files" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
+                                <TextBlock Text="✓ 4. Apply configured my.ini configuration" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
+                                <TextBlock Text="✓ 5. Migrate live Database data/ folder to new installation" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
+                                <TextBlock Text="✓ 6. Restart MySQL &amp; Apache Services &amp; Verify Status" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
                             </StackPanel>
                         </Grid>
                     </StackPanel>
@@ -523,7 +533,7 @@
 
                     <Button Grid.Column="0" Style="{StaticResource SecondaryButtonStyle}"
                             Content="⬅️ Back to Config Diff"
-                            Command="{Binding Step3BackCommand}"
+                            Command="{Binding GoBackToStep2Command}"
                             Visibility="{Binding IsExecuting, Converter={StaticResource InverseBoolToVisConverter}}"
                             IsEnabled="{Binding IsCompleted, Converter={StaticResource InverseBoolConverter}}"
                             Padding="16,8" />
@@ -535,7 +545,7 @@
                             <TextBlock Text="🧪 Simulation Completed! Ready to update."
                                        FontWeight="Bold" Foreground="#15803D" FontSize="12.5"
                                        Visibility="{Binding IsTestCompleted, Converter={StaticResource BoolToVisConverter}}" />
-                            <TextBlock Text="🎉 PHP Update Succeeded!"
+                            <TextBlock Text="🎉 MySQL Update Succeeded!"
                                        FontWeight="Bold" Foreground="#15803D" FontSize="12.5"
                                        Visibility="{Binding IsTestCompleted, Converter={StaticResource InverseBoolToVisConverter}}" />
                         </StackPanel>
@@ -548,7 +558,7 @@
                     </Border>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <!-- Before Completion: Both Buttons Side-by-Side -->
+                        <!-- Before Completion -->
                         <StackPanel Orientation="Horizontal" Visibility="{Binding IsCompleted, Converter={StaticResource InverseBoolToVisConverter}}">
                             <Button Style="{StaticResource SecondaryButtonStyle}"
                                     Content="🧪 Run Test Mode Simulation"
@@ -563,7 +573,7 @@
                                     Padding="20,10" FontSize="13.5" />
                         </StackPanel>
 
-                        <!-- After Test Mode Completed: Can Re-test or Real Start Exec -->
+                        <!-- After Test Completed -->
                         <StackPanel Orientation="Horizontal" Visibility="{Binding IsTestCompleted, Converter={StaticResource BoolToVisConverter}}">
                             <CheckBox Content="⚡ Skip backup in real update (already verified)"
                                       IsChecked="{Binding SkipBackupDuringRealUpdate}"
@@ -583,14 +593,235 @@
                                     Padding="18,10" Margin="0,0,10,0" FontSize="13" />
                         </StackPanel>
 
-                        <!-- Finish / Done Button -->
+                        <!-- Real Update Completed: Option to Close or Proceed to Step 4 Database Table Upgrade -->
                         <StackPanel Orientation="Horizontal" Visibility="{Binding IsSuccess, Converter={StaticResource BoolToVisConverter}}">
-                            <Button Style="{StaticResource PrimaryButtonStyle}"
-                                    Content="✅ Done &amp; Close"
-                                    Command="{Binding CancelOrCloseCommand}"
-                                    Visibility="{Binding IsTestCompleted, Converter={StaticResource InverseBoolToVisConverter}}"
-                                    Padding="20,10" FontSize="13.5" />
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsTestCompleted, Converter={StaticResource InverseBoolToVisConverter}}">
+                                <Button Style="{StaticResource SecondaryButtonStyle}"
+                                        Content="✅ Finish &amp; Close"
+                                        Command="{Binding CancelOrCloseCommand}"
+                                        Padding="14,10" Margin="0,0,10,0" FontSize="13" />
+
+                                <Button Style="{StaticResource PrimaryButtonStyle}"
+                                        Content="📋 Next: Upgrade Database Tables (Step 4) →"
+                                        Command="{Binding ProceedToStep4Command}"
+                                        Padding="18,10" FontSize="13.5" />
+                            </StackPanel>
                         </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- ========================================== -->
+            <!-- STEP 4: DATABASE TABLE UPGRADE             -->
+            <!-- ========================================== -->
+            <Grid>
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStepIndex}" Value="3">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Configuration & Parameters Card -->
+                <Border Grid.Row="0" Style="{StaticResource CardBorderStyle}" Padding="18,14" Margin="0,0,0,12">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="Step 4: Upgrade Database Schemas &amp; System Tables (mysql_upgrade)" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                <TextBlock Text="Run the official mysql_upgrade / mariadb-upgrade tool to check, repair, and upgrade internal system tables for the new database engine."
+                                           FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Upgrade Script / Tool Path -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="Upgrade Script / Tool:" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                            <TextBox Grid.Column="1" Text="{Binding MySqlUpgradeToolPath, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ModernTextBoxStyle}" FontSize="12.5" Padding="10,6" />
+                            <Button Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                                     Content="📂 Browse..."
+                                     Command="{Binding BrowseUpgradeToolCommand}"
+                                     Padding="14,6" Margin="8,0,0,0" />
+                        </Grid>
+
+                        <!-- Service Control & Engine Log Cleanup Bar -->
+                        <Border Background="{StaticResource SurfaceSubtleBgBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,8"
+                                Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Left: Service Status & Start/Stop -->
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="MySQL Service:" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <Border Background="{StaticResource SurfaceBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8,3" Margin="0,0,10,0">
+                                        <TextBlock Text="{Binding ServiceStatusDisplay}" FontWeight="Bold" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <Button Style="{StaticResource SuccessButtonStyle}"
+                                            Content="▶️ Start Service"
+                                            Command="{Binding StartMySqlServiceCommand}"
+                                            IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
+                                            Padding="10,4" FontSize="11.5" Margin="0,0,6,0" />
+
+                                    <Button Style="{StaticResource SecondaryButtonStyle}"
+                                            Content="⏹️ Stop Service"
+                                            Command="{Binding StopMySqlServiceCommand}"
+                                            IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
+                                            Padding="10,4" FontSize="11.5" Margin="0,0,10,0" />
+                                </StackPanel>
+
+                                <!-- Right: Service & Config Tools -->
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Style="{StaticResource SecondaryButtonStyle}"
+                                            Content="📝 Open my.ini"
+                                            Command="{Binding OpenMyIniFileCommand}"
+                                            ToolTip="Opens my.ini in your default text editor to configure MySQL settings."
+                                            Padding="10,5" FontSize="11.5" Margin="0,0,6,0" />
+
+                                    <Button Style="{StaticResource SecondaryButtonStyle}"
+                                            Content="📄 Error Log"
+                                            Command="{Binding OpenErrorLogFileCommand}"
+                                            ToolTip="Opens MySQL error log (mysql_error.log or hostname.err) in your default text editor."
+                                            Padding="10,5" FontSize="11.5" Margin="0,0,6,0" />
+
+                                    <Button Style="{StaticResource SecondaryButtonStyle}"
+                                            Content="↩️ Restore .bak Files"
+                                            Command="{Binding RestoreRenamedFilesCommand}"
+                                            IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
+                                            ToolTip="Restores all .bak files in data/ back to their original names."
+                                            Padding="10,5" FontSize="11.5" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Parameters Form -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="User:" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBox Grid.Column="1" Text="{Binding MySqlUpgradeUser, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ModernTextBoxStyle}" FontSize="12" Padding="8,4" />
+
+                            <TextBlock Grid.Column="2" Text="Password:" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="14,0,8,0" />
+                            <PasswordBox Grid.Column="3" x:Name="UpgradePasswordBox"
+                                         PasswordChar="●"
+                                         PasswordChanged="UpgradePasswordBox_PasswordChanged"
+                                         Style="{StaticResource ModernPasswordBoxStyle}" FontSize="12" Padding="8,4" />
+
+                            <TextBlock Grid.Column="4" Text="Arguments:" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="14,0,8,0" />
+                            <TextBox Grid.Column="5" Text="{Binding MySqlUpgradeArguments, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ModernTextBoxStyle}" FontSize="12" Padding="8,4" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Live Execution Console (Light Theme) -->
+                <Border Grid.Row="1" Style="{StaticResource CardBorderStyle}" Padding="16">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="DATABASE UPGRADE OUTPUT LOG" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding UpgradeStatusMessage}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource PrimaryAccentBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <Button Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                                    Content="📋 Copy Logs"
+                                    Command="{Binding CopyUpgradeLogsCommand}"
+                                    Padding="10,3" FontSize="11" />
+                        </Grid>
+
+                        <Border Background="{StaticResource SurfaceSubtleBgBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12">
+                            <ListBox ItemsSource="{Binding UpgradeLogs}"
+                                     controls:AutoScrollBehavior.AutoScroll="True"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{StaticResource TextPrimaryBrush}"
+                                     FontFamily="Consolas, Cascadia Code, Courier New"
+                                     FontSize="12" />
+                        </Border>
+                    </DockPanel>
+                </Border>
+
+                <!-- Step 4 Navigation & Action Footer -->
+                <Grid Grid.Row="2" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" Style="{StaticResource SecondaryButtonStyle}"
+                            Content="⬅️ Back"
+                            Command="{Binding GoBackFromStep4Command}"
+                            IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
+                            Padding="16,8" />
+
+                    <!-- Success Banner -->
+                    <Border Grid.Column="1" Background="#DCFCE7" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="8" Padding="12,6" Margin="16,0"
+                            Visibility="{Binding IsUpgradeSuccess, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="🎉 Database tables upgraded and verified successfully!" FontWeight="Bold" Foreground="#15803D" FontSize="12.5" HorizontalAlignment="Center" />
+                    </Border>
+
+                    <!-- Error Banner -->
+                    <Border Grid.Column="1" Background="#FEE2E2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="8" Padding="12,6" Margin="16,0"
+                            Visibility="{Binding UpgradeErrorMessage, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="{Binding UpgradeErrorMessage}" Foreground="#B91C1C" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" />
+                    </Border>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Style="{StaticResource WarningButtonStyle}"
+                                Content="⚡ Upgrade System Tables Only (-s)"
+                                Command="{Binding RunSystemTablesUpgradeOnlyCommand}"
+                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
+                                ToolTip="Skips mysqlcheck phase and directly recreates/upgrades system tables (mysql.gtid_slave_pos, innodb_index_stats, etc.)"
+                                Padding="14,10" Margin="0,0,10,0" FontSize="13" />
+
+                        <Button Style="{StaticResource SuccessButtonStyle}"
+                                Content="🚀 Run Full Upgrade"
+                                Command="{Binding RunMySqlUpgradeCommand}"
+                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
+                                Padding="18,10" Margin="0,0,10,0" FontSize="13.5" />
+
+                        <Button Style="{StaticResource PrimaryButtonStyle}"
+                                Content="✅ Finish &amp; Close"
+                                Command="{Binding CancelOrCloseCommand}"
+                                Padding="18,10" FontSize="13.5" />
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -604,7 +835,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="XAMPP Local Server Updater • PHP Engine Guided Wizard" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="XAMPP Local Server Updater • MySQL / MariaDB Upgrade Wizard" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="✕ Cancel &amp; Close" Command="{Binding CancelOrCloseCommand}" Padding="12,6" />
             </Grid>
         </Border>

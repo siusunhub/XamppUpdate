@@ -473,5 +473,172 @@ namespace XamppUpdate.Services
                 return true;
             });
         }
+
+        public async Task<SslCertificateInfo> ReadDefaultXamppCertificateAsync(string? apachePath = null)
+        {
+            return await Task.Run(() =>
+            {
+                string baseDir = !string.IsNullOrWhiteSpace(apachePath) && Directory.Exists(apachePath)
+                    ? apachePath
+                    : @"C:\xampp\apache";
+
+                string certPath = Path.Combine(baseDir, "conf", "ssl.crt", "server.crt");
+                string keyPath = Path.Combine(baseDir, "conf", "ssl.key", "server.key");
+
+                var certInfo = new SslCertificateInfo
+                {
+                    HostName = "localhost (Default XAMPP)",
+                    Port = "443",
+                    CertificateFilePath = certPath,
+                    KeyFilePath = keyPath,
+                    ConfigSourceFile = "conf/extra/httpd-ssl.conf",
+                    CertificateFileExists = File.Exists(certPath),
+                    KeyFileExists = File.Exists(keyPath)
+                };
+
+                InspectCertificateFile(certInfo);
+                return certInfo;
+            });
+        }
+
+        public async Task<GenerateDefaultSslCertResult> GenerateDefaultCertificateAsync(GenerateDefaultSslCertRequest request, IProgress<string>? progress = null)
+        {
+            return await Task.Run(async () =>
+            {
+                var result = new GenerateDefaultSslCertResult();
+                string apacheDir = !string.IsNullOrWhiteSpace(request.ApachePath) && Directory.Exists(request.ApachePath)
+                    ? request.ApachePath
+                    : @"C:\xampp\apache";
+
+                string openSslExe = Path.Combine(apacheDir, "bin", "openssl.exe");
+                if (!File.Exists(openSslExe))
+                {
+                    openSslExe = Path.Combine(apacheDir, "bin", "openssl");
+                }
+
+                if (!File.Exists(openSslExe))
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"OpenSSL executable not found at: {openSslExe}";
+                    progress?.Report($"[ERROR] {result.ErrorMessage}");
+                    return result;
+                }
+
+                // Ensure target directories exist
+                string keyDir = Path.Combine(apacheDir, Path.GetDirectoryName(request.RelativeKeyPath) ?? @"conf\ssl.key");
+                string certDir = Path.Combine(apacheDir, Path.GetDirectoryName(request.RelativeCertPath) ?? @"conf\ssl.crt");
+                if (!Directory.Exists(keyDir)) Directory.CreateDirectory(keyDir);
+                if (!Directory.Exists(certDir)) Directory.CreateDirectory(certDir);
+
+                // Write cert_config.cnf in apache root
+                string configPath = Path.Combine(apacheDir, "cert_config.cnf");
+                string configContent = request.GenerateConfigFileContent();
+
+                try
+                {
+                    await File.WriteAllTextAsync(configPath, configContent, new System.Text.UTF8Encoding(false));
+                    progress?.Report($"[CONFIG] Written OpenSSL configuration file to: {configPath}");
+
+                    string arguments = $"req -x509 -nodes -days {request.Days} -newkey rsa:{request.KeyBits} -keyout \"{request.RelativeKeyPath}\" -out \"{request.RelativeCertPath}\" -config \"cert_config.cnf\" -extensions v3_req";
+                    progress?.Report($"[EXECUTE] cd \"{apacheDir}\" && bin\\openssl {arguments}");
+
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = openSslExe,
+                        Arguments = arguments,
+                        WorkingDirectory = apacheDir,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    psi.EnvironmentVariables["OPENSSL_CONF"] = configPath;
+
+                    using var process = new Process { StartInfo = psi };
+                    var outputBuilder = new System.Text.StringBuilder();
+                    object lockObj = new object();
+
+                    process.OutputDataReceived += (s, e) =>
+                    {
+                        if (e.Data != null)
+                        {
+                            lock (lockObj)
+                            {
+                                outputBuilder.AppendLine(e.Data);
+                            }
+                            progress?.Report(e.Data);
+                        }
+                    };
+
+                    process.ErrorDataReceived += (s, e) =>
+                    {
+                        if (e.Data != null)
+                        {
+                            lock (lockObj)
+                            {
+                                outputBuilder.AppendLine(e.Data);
+                            }
+                            progress?.Report(e.Data);
+                        }
+                    };
+
+                    process.Start();
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+
+                    await process.WaitForExitAsync();
+
+                    lock (lockObj)
+                    {
+                        result.Output = outputBuilder.ToString();
+                    }
+
+                    string targetCert = Path.Combine(apacheDir, request.RelativeCertPath);
+                    string targetKey = Path.Combine(apacheDir, request.RelativeKeyPath);
+
+                    if (process.ExitCode == 0 && File.Exists(targetCert) && File.Exists(targetKey))
+                    {
+                        result.Success = true;
+                        progress?.Report($"[SUCCESS] Default SSL certificate and private key generated successfully!");
+
+                        // Re-inspect updated certificate
+                        var updatedInfo = new SslCertificateInfo
+                        {
+                            HostName = $"{request.CommonName} (Default XAMPP)",
+                            Port = "443",
+                            CertificateFilePath = targetCert,
+                            KeyFilePath = targetKey,
+                            ConfigSourceFile = "conf/extra/httpd-ssl.conf",
+                            CertificateFileExists = true,
+                            KeyFileExists = true
+                        };
+                        InspectCertificateFile(updatedInfo);
+                        result.UpdatedCertInfo = updatedInfo;
+                    }
+                    else
+                    {
+                        result.Success = false;
+                        result.ErrorMessage = $"OpenSSL exited with code {process.ExitCode}. Output: {result.Output}";
+                        progress?.Report($"[ERROR] OpenSSL failed with code {process.ExitCode}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Exception during certificate generation: {ex.Message}";
+                    progress?.Report($"[FATAL ERROR] {ex.Message}");
+                }
+                finally
+                {
+                    // Clean up temporary config file
+                    if (File.Exists(configPath))
+                    {
+                        try { File.Delete(configPath); } catch { }
+                    }
+                }
+
+                return result;
+            });
+        }
     }
 }

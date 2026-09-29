@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +17,9 @@ namespace XamppUpdate.ViewModels
         private readonly IComposerService _composerService;
         private readonly ISettingsService _settingsService;
         private CancellationTokenSource? _cts;
+
+        public Func<string, string, bool> ConfirmAction { get; set; } = (msg, title) =>
+            MessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
 
         [ObservableProperty]
         private string _composerExecutablePath = string.Empty;
@@ -37,6 +41,15 @@ namespace XamppUpdate.ViewModels
 
         [ObservableProperty]
         private bool _isTestMode;
+
+        [ObservableProperty]
+        private bool _isWithAllDependencies;
+
+        public bool IsForceMajorUpgrade
+        {
+            get => IsWithAllDependencies;
+            set => IsWithAllDependencies = value;
+        }
 
         [ObservableProperty]
         private string _statusMessage = "Ready.";
@@ -119,6 +132,162 @@ namespace XamppUpdate.ViewModels
             }
         }
 
+        [RelayCommand]
+        public async Task OpenComposerJsonAsync()
+        {
+            try
+            {
+                string targetDir = !string.IsNullOrWhiteSpace(DownloadTargetPath)
+                    ? DownloadTargetPath
+                    : WwwTargetPath;
+
+                if (string.IsNullOrWhiteSpace(targetDir) || !Directory.Exists(targetDir))
+                {
+                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [ERROR] Target directory does not exist: '{targetDir}'. Please select a valid Download Target Directory.");
+                    StatusMessage = "Download directory not found.";
+                    return;
+                }
+
+                string jsonPath = Path.Combine(targetDir, "composer.json");
+                if (!File.Exists(jsonPath))
+                {
+                    string defaultJson = "{\n    \"name\": \"app/project\",\n    \"require\": {\n    }\n}\n";
+                    await File.WriteAllTextAsync(jsonPath, defaultJson, new System.Text.UTF8Encoding(false));
+                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [INFO] Created starter composer.json at: {jsonPath}");
+                }
+                else
+                {
+                    await ComposerService.StripBomIfPresentAsync(jsonPath);
+                }
+
+                string editorExe = await Task.Run(() => ResolveTextEditorExecutable());
+
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = editorExe,
+                        Arguments = $"\"{jsonPath}\"",
+                        UseShellExecute = true
+                    });
+                }
+                catch
+                {
+                    // Fallback to notepad
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "notepad.exe",
+                        Arguments = $"\"{jsonPath}\"",
+                        UseShellExecute = true
+                    });
+                }
+
+                string editorName = Path.GetFileNameWithoutExtension(editorExe);
+                ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [INFO] Opened '{jsonPath}' using {editorName}");
+                StatusMessage = $"Opened composer.json using {editorName}.";
+            }
+            catch (Exception ex)
+            {
+                ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [ERROR] Could not open composer.json: {ex.Message}");
+                StatusMessage = $"Could not open composer.json: {ex.Message}";
+            }
+        }
+
+        public static string ResolveTextEditorExecutable()
+        {
+            // 1. Notepad++
+            string? npp = FindAppInRegistry("notepad++.exe")
+                ?? CheckPath(@"C:\Program Files\Notepad++\notepad++.exe")
+                ?? CheckPath(@"C:\Program Files (x86)\Notepad++\notepad++.exe")
+                ?? CheckPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Notepad++\notepad++.exe"))
+                ?? FindInPath("notepad++.exe");
+
+            if (!string.IsNullOrEmpty(npp)) return npp;
+
+            // 2. EmEditor
+            string? emeditor = FindAppInRegistry("EmEditor.exe")
+                ?? CheckPath(@"C:\Program Files\EmEditor\EmEditor.exe")
+                ?? CheckPath(@"C:\Program Files (x86)\EmEditor\EmEditor.exe")
+                ?? CheckPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\EmEditor\EmEditor.exe"))
+                ?? FindInPath("EmEditor.exe");
+
+            if (!string.IsNullOrEmpty(emeditor)) return emeditor;
+
+            // 3. Other popular code editors (VS Code, Sublime Text, Notepad2)
+            string? vscode = FindAppInRegistry("Code.exe")
+                ?? CheckPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Microsoft VS Code\Code.exe"))
+                ?? CheckPath(@"C:\Program Files\Microsoft VS Code\Code.exe")
+                ?? FindInPath("code.cmd");
+
+            if (!string.IsNullOrEmpty(vscode)) return vscode;
+
+            string? sublime = FindAppInRegistry("sublime_text.exe")
+                ?? CheckPath(@"C:\Program Files\Sublime Text\sublime_text.exe")
+                ?? CheckPath(@"C:\Program Files (x86)\Sublime Text\sublime_text.exe")
+                ?? CheckPath(@"C:\Program Files\Sublime Text 3\sublime_text.exe")
+                ?? FindInPath("subl.exe");
+
+            if (!string.IsNullOrEmpty(sublime)) return sublime;
+
+            // 4. Windows Native Notepad (guaranteed fallback)
+            string systemNotepad = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "notepad.exe");
+            if (File.Exists(systemNotepad)) return systemNotepad;
+
+            return "notepad.exe";
+        }
+
+        private static string? FindAppInRegistry(string appExeName)
+        {
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey($@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{appExeName}")
+                             ?? Registry.CurrentUser.OpenSubKey($@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{appExeName}");
+                if (key != null)
+                {
+                    var defaultVal = key.GetValue(null) as string;
+                    if (!string.IsNullOrEmpty(defaultVal) && File.Exists(defaultVal))
+                    {
+                        return defaultVal;
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static string? CheckPath(string path)
+        {
+            try
+            {
+                return File.Exists(path) ? path : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string? FindInPath(string filename)
+        {
+            try
+            {
+                var pathEnv = Environment.GetEnvironmentVariable("PATH");
+                if (string.IsNullOrEmpty(pathEnv)) return null;
+
+                foreach (var dir in pathEnv.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    try
+                    {
+                        string fullPath = Path.Combine(dir.Trim(), filename);
+                        if (File.Exists(fullPath)) return fullPath;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return null;
+        }
+
         private void PersistSettings()
         {
             try
@@ -166,7 +335,7 @@ namespace XamppUpdate.ViewModels
                 ? DownloadTargetPath
                 : WwwTargetPath;
 
-            PrepareExecution($"Check New Components (composer outdated in {targetDir})");
+            PrepareExecution($"Inspect All Packages & Versions (composer outdated --all in {targetDir})");
             var progress = CreateProgressReporter();
 
             try
@@ -197,13 +366,11 @@ namespace XamppUpdate.ViewModels
         {
             if (IsBusy) return;
 
-            string targetDir = !string.IsNullOrWhiteSpace(DownloadTargetPath)
-                ? DownloadTargetPath
-                : WwwTargetPath;
+            string targetDir = DownloadTargetPath;
 
-            string opName = IsTestMode
-                ? $"Package Update Simulation (dry-run in {targetDir})"
-                : $"Live Package Update in {targetDir} & Auto-Backup vendor/";
+            string opName = IsWithAllDependencies
+                ? $"Update Packages with all dependencies (--with-all-dependencies in {targetDir})"
+                : $"Download & Update Packages in {targetDir}";
 
             PrepareExecution(opName);
             var progress = CreateProgressReporter();
@@ -212,24 +379,23 @@ namespace XamppUpdate.ViewModels
             {
                 if (string.IsNullOrWhiteSpace(targetDir) || !Directory.Exists(targetDir))
                 {
-                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [ERROR] Target directory does not exist: '{targetDir}'. Please select a valid Download Target Directory.");
-                    StatusMessage = "Directory not found.";
+                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [ERROR] Download Target directory does not exist: '{targetDir}'. Please select a valid Download Target Directory.");
+                    StatusMessage = "Download directory not found.";
                     return;
                 }
 
                 bool success = await _composerService.RunUpdatePackagesAsync(
                     ComposerExecutablePath,
                     targetDir,
-                    targetDir,
-                    IsTestMode,
+                    IsWithAllDependencies,
                     progress,
                     _cts!.Token);
 
                 if (success)
                 {
-                    StatusMessage = IsTestMode
-                        ? "Dry-run simulation completed successfully! No files were changed."
-                        : "Packages updated successfully! Vendor backup preserved.";
+                    StatusMessage = IsWithAllDependencies
+                        ? "Packages and all sub-dependencies updated successfully!"
+                        : "Packages downloaded and updated successfully in Download Target Directory!";
                 }
                 else
                 {
@@ -240,6 +406,87 @@ namespace XamppUpdate.ViewModels
             {
                 ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] EXCEPTION: {ex.Message}");
                 StatusMessage = "Package update failed with exception.";
+            }
+            finally
+            {
+                EndExecution();
+            }
+        }
+
+        [RelayCommand]
+        public async Task RunDeployToWwwAsync()
+        {
+            if (IsBusy) return;
+
+            if (!IsTestMode)
+            {
+                bool confirmed = ConfirmAction(
+                    "Are you sure you want to proceed with the REAL Backup & Deploy to WWW?\n\n" +
+                    "• Existing WWW vendor directory will be backed up to a .zip archive.\n" +
+                    "• Existing vendor folder will be renamed to vendor_old.\n" +
+                    "• Updated vendor packages will be copied to your live WWW directory.\n\n" +
+                    "Do you want to proceed?",
+                    "Confirm Real Vendor Deployment");
+
+                if (!confirmed)
+                {
+                    StatusMessage = "Vendor deployment cancelled by user.";
+                    return;
+                }
+            }
+
+            string backupDir = _settingsService.CurrentSettings.General.BackupDirectory;
+            string opName = IsTestMode
+                ? $"Backup WWW & Simulate Deploy to {WwwTargetPath} (Test Mode)"
+                : $"Backup WWW & Deploy to {WwwTargetPath}";
+
+            PrepareExecution(opName);
+            var progress = CreateProgressReporter();
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(DownloadTargetPath) || !Directory.Exists(DownloadTargetPath))
+                {
+                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [ERROR] Download Target directory does not exist: '{DownloadTargetPath}'. Please select a valid Download Target Directory.");
+                    StatusMessage = "Download directory not found.";
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(WwwTargetPath) || !Directory.Exists(WwwTargetPath))
+                {
+                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [ERROR] WWW Target directory does not exist: '{WwwTargetPath}'. Please select a valid WWW Target Directory.");
+                    StatusMessage = "WWW directory not found.";
+                    return;
+                }
+
+                bool success = await _composerService.RunDeployToWwwAsync(
+                    DownloadTargetPath,
+                    WwwTargetPath,
+                    backupDir,
+                    IsTestMode,
+                    progress,
+                    _cts!.Token);
+
+                if (success)
+                {
+                    StatusMessage = IsTestMode
+                        ? "Dry-run simulation completed! Real backup created. No WWW files were modified."
+                        : "Packages deployed to WWW successfully! Real backup created.";
+                }
+                else
+                {
+                    StatusMessage = "Deployment reported warnings/errors.";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] [CANCELLED] Operation cancelled by user.");
+                StatusMessage = "Operation cancelled.";
+            }
+            catch (Exception ex)
+            {
+                ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] EXCEPTION: {ex.Message}");
+                StatusMessage = "Deploy failed with exception.";
             }
             finally
             {
@@ -304,13 +551,27 @@ namespace XamppUpdate.ViewModels
             _cts = null;
         }
 
+        [RelayCommand]
+        public void Close()
+        {
+            RequestClose?.Invoke();
+        }
+
         private IProgress<string> CreateProgressReporter()
         {
             return new Progress<string>(line =>
             {
                 if (!string.IsNullOrWhiteSpace(line))
                 {
-                    ExecutionLogs.Add($"[{DateTime.Now:HH:mm:ss}] {line}");
+                    string entry = $"[{DateTime.Now:HH:mm:ss}] {line}";
+                    if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.CheckAccess())
+                    {
+                        Application.Current.Dispatcher.Invoke(() => ExecutionLogs.Add(entry));
+                    }
+                    else
+                    {
+                        ExecutionLogs.Add(entry);
+                    }
                 }
             });
         }

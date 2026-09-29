@@ -16,6 +16,8 @@ namespace XamppUpdate
         private IConfigDiffService? _configDiffService;
         private IApacheUpdateService? _apacheUpdateService;
         private IPhpUpdateService? _phpUpdateService;
+        private IMySqlUpdateService? _mySqlUpdateService;
+        private IPhpMyAdminUpdateService? _phpMyAdminUpdateService;
         private ISslCertificateService? _sslCertificateService;
         private IComposerService? _composerService;
 
@@ -65,6 +67,18 @@ namespace XamppUpdate
                 _versionDetectionService,
                 _archiveService,
                 _configDiffService);
+            _mySqlUpdateService = new MySqlUpdateService(
+                _settingsService,
+                _serviceManager,
+                _versionDetectionService,
+                _archiveService,
+                _configDiffService);
+            _phpMyAdminUpdateService = new PhpMyAdminUpdateService(
+                _settingsService,
+                _serviceManager,
+                _versionDetectionService,
+                _archiveService,
+                _configDiffService);
 
             // Ensure folders
             EnsureAppDirectories();
@@ -75,8 +89,10 @@ namespace XamppUpdate
             var mainWindow = new MainWindow(
                 mainViewModel,
                 () => new SettingsViewModel(_settingsService),
-                () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService),
+                () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService, _sslCertificateService),
                 () => new PhpWizardViewModel(_phpUpdateService, _settingsService, _versionDetectionService),
+                () => new MySqlWizardViewModel(_mySqlUpdateService, _settingsService, _versionDetectionService, _serviceManager),
+                () => new PhpMyAdminWizardViewModel(_phpMyAdminUpdateService, _settingsService, _versionDetectionService),
                 () => new SslManagerViewModel(_sslCertificateService, _settingsService, _serviceManager),
                 () => new ComposerViewModel(_composerService, _settingsService));
 
@@ -88,12 +104,14 @@ namespace XamppUpdate
         {
             try
             {
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string tempDir = Path.Combine(baseDir, "temp");
-                string backupDir = Path.Combine(baseDir, "backup");
+                if (_settingsService != null)
+                {
+                    string tempDir = _settingsService.CurrentSettings.General.ResolvedTempDirectory;
+                    string backupDir = _settingsService.CurrentSettings.General.ResolvedBackupDirectory;
 
-                if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
-                if (!Directory.Exists(backupDir)) Directory.CreateDirectory(backupDir);
+                    if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+                    if (!Directory.Exists(backupDir)) Directory.CreateDirectory(backupDir);
+                }
             }
             catch (Exception ex)
             {

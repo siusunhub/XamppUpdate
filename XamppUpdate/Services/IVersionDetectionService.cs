@@ -11,5 +11,6 @@ namespace XamppUpdate.Services
         Task<string> DetectMySqlVersionAsync(string installationPath);
         Task<string> DetectComposerVersionAsync(string executablePath);
         Task<string> DetectSslStatusAsync(string certificatesPath);
+        Task<string> DetectPhpMyAdminVersionAsync(string installationPath);
     }
 }

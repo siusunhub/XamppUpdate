@@ -6,17 +6,23 @@ using XamppUpdate.Models;
 
 namespace XamppUpdate.Services
 {
-    public interface IApacheUpdateService
+    public interface IPhpMyAdminUpdateService
     {
-        Task<string> PrepareIncomingSourceAsync(string sourceUrlOrPath, IProgress<UpdateProgressReport>? progress = null, CancellationToken cancellationToken = default);
-        Task<List<ConfigDiffItem>> InspectConfigurationsAsync(string incomingApacheRoot);
+        Task<string> PrepareIncomingSourceAsync(
+            string sourceUrlOrPath,
+            IProgress<UpdateProgressReport>? progress = null,
+            CancellationToken cancellationToken = default);
+
+        Task<List<ConfigDiffItem>> InspectConfigurationsAsync(string incomingPhpMyAdminRoot);
+
         Task<bool> ExecuteUpdatePipelineAsync(
-            string incomingApacheRoot,
+            string incomingPhpMyAdminRoot,
             List<ConfigDiffItem> resolvedConfigs,
             bool isTestMode = false,
             bool skipBackup = false,
             IProgress<UpdateProgressReport>? progress = null,
             CancellationToken cancellationToken = default);
+
         void CleanupTempDirectory(string tempDirectoryPath);
     }
 }

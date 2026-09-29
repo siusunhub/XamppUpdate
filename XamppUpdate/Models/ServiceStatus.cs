@@ -5,6 +5,7 @@ namespace XamppUpdate.Models
         Apache,
         Php,
         MySql,
+        PhpMyAdmin,
         Ssl,
         Composer
     }

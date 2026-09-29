@@ -38,6 +38,20 @@ namespace XamppUpdate.Services
             var settings = _settingsService.CurrentSettings;
             string tempBase = settings.General.ResolvedTempDirectory;
 
+            // Check if source is an existing directory
+            if (Directory.Exists(sourceUrlOrPath))
+            {
+                string detectedRoot = _archiveService.FindApacheRoot(sourceUrlOrPath);
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.DownloadAndExtract,
+                    StepTitle = "Preparation Complete",
+                    Message = $"Ready. Apache root detected at: {Path.GetFileName(detectedRoot)}",
+                    Percentage = 100
+                });
+                return detectedRoot;
+            }
+
             if (!Directory.Exists(tempBase))
             {
                 Directory.CreateDirectory(tempBase);
@@ -160,6 +174,7 @@ namespace XamppUpdate.Services
             string incomingApacheRoot,
             List<ConfigDiffItem> resolvedConfigs,
             bool isTestMode = false,
+            bool skipBackup = false,
             IProgress<UpdateProgressReport>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -190,60 +205,73 @@ namespace XamppUpdate.Services
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string backupZipPath = Path.Combine(backupDir, $"apache_{currentVersion}_{timestamp}.zip");
 
-            // Step 1: Backup (Real in both modes)
-            progress?.Report(new UpdateProgressReport
+            // Step 1: Backup (Real in both modes unless skipped)
+            if (skipBackup)
             {
-                Step = UpdateStep.BackupCreation,
-                StepTitle = $"{modeTag}Creating Full Backup",
-                Message = $"{modeTag}Backing up active Apache directory to {Path.GetFileName(backupZipPath)}...",
-                Percentage = 15,
-                IsIndeterminate = false
-            });
-
-            var backupProgress = new Progress<string>(msg =>
-            {
-                int pct = 20;
-                if (msg.Contains('(') && msg.Contains('/'))
+                progress?.Report(new UpdateProgressReport
                 {
-                    try
-                    {
-                        int start = msg.IndexOf('(') + 1;
-                        int slash = msg.IndexOf('/', start);
-                        int end = msg.IndexOf(' ', slash);
-                        if (start > 0 && slash > start && end > slash)
-                        {
-                            if (int.TryParse(msg[start..slash], out int cur) &&
-                                int.TryParse(msg[(slash + 1)..end], out int tot) && tot > 0)
-                            {
-                                pct = 15 + (int)(10.0 * cur / tot);
-                            }
-                        }
-                    }
-                    catch { }
-                }
-
+                    Step = UpdateStep.BackupCreation,
+                    StepTitle = "Backup Skipped",
+                    Message = "[BACKUP] Backup skipped by user (simulation backup already verified).",
+                    Percentage = 25
+                });
+            }
+            else
+            {
                 progress?.Report(new UpdateProgressReport
                 {
                     Step = UpdateStep.BackupCreation,
                     StepTitle = $"{modeTag}Creating Full Backup",
-                    Message = $"{modeTag}{msg}",
-                    Percentage = pct,
+                    Message = $"{modeTag}Backing up active Apache directory to {Path.GetFileName(backupZipPath)}...",
+                    Percentage = 15,
                     IsIndeterminate = false
                 });
-            });
 
-            await _archiveService.CreateZipBackupAsync(localApacheRoot, backupZipPath, backupProgress, cancellationToken);
-            EnforceBackupRetention(backupDir, settings.General.MaxBackupRetentionCount);
-
-            if (isTestMode)
-            {
-                progress?.Report(new UpdateProgressReport
+                var backupProgress = new Progress<string>(msg =>
                 {
-                    Step = UpdateStep.BackupCreation,
-                    StepTitle = "[TEST MODE] Backup Verified",
-                    Message = $"[TEST MODE] Successfully tested zip backup: {Path.GetFileName(backupZipPath)} created.",
-                    Percentage = 25
+                    int pct = 20;
+                    if (msg.Contains('(') && msg.Contains('/'))
+                    {
+                        try
+                        {
+                            int start = msg.IndexOf('(') + 1;
+                            int slash = msg.IndexOf('/', start);
+                            int end = msg.IndexOf(' ', slash);
+                            if (start > 0 && slash > start && end > slash)
+                            {
+                                if (int.TryParse(msg[start..slash], out int cur) &&
+                                    int.TryParse(msg[(slash + 1)..end], out int tot) && tot > 0)
+                                {
+                                    pct = 15 + (int)(10.0 * cur / tot);
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.BackupCreation,
+                        StepTitle = $"{modeTag}Creating Full Backup",
+                        Message = $"{modeTag}{msg}",
+                        Percentage = pct,
+                        IsIndeterminate = false
+                    });
                 });
+
+                await _archiveService.CreateZipBackupAsync(localApacheRoot, backupZipPath, backupProgress, cancellationToken);
+                EnforceBackupRetention(backupDir, settings.General.MaxBackupRetentionCount);
+
+                if (isTestMode)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.BackupCreation,
+                        StepTitle = "[TEST MODE] Backup Verified",
+                        Message = $"[TEST MODE] Successfully tested zip backup: {Path.GetFileName(backupZipPath)} created.",
+                        Percentage = 25
+                    });
+                }
             }
 
             bool serviceExists = _serviceManager.ServiceExists(serviceName);

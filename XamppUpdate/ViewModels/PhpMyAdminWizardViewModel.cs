@@ -13,9 +13,9 @@ using XamppUpdate.Services;
 
 namespace XamppUpdate.ViewModels
 {
-    public partial class PhpWizardViewModel : ViewModelBase
+    public partial class PhpMyAdminWizardViewModel : ViewModelBase
     {
-        private readonly IPhpUpdateService _updateService;
+        private readonly IPhpMyAdminUpdateService _updateService;
         private readonly ISettingsService _settingsService;
         private readonly IVersionDetectionService _versionDetectionService;
         private CancellationTokenSource? _cts;
@@ -54,49 +54,24 @@ namespace XamppUpdate.ViewModels
         [ObservableProperty]
         private string _baselineInstalledVersion = string.Empty;
 
-        [ObservableProperty]
-        private PhpBuildInfo? _baselineInstalledBuild;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
-        private PhpBuildInfo? _currentPhpBuild;
-
-        partial void OnCurrentPhpBuildChanged(PhpBuildInfo? value)
-        {
-            if (!IsExecuting && !IsCompleted && value != null)
-            {
-                BaselineInstalledBuild = value;
-                BaselineInstalledVersion = value.Version;
-            }
-        }
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(VersionTransitionDisplay))]
-        private PhpBuildInfo? _incomingPhpBuild;
-
-        [ObservableProperty]
-        private bool _isIncomingCompatibleWithApache = true;
-
         public string VersionTransitionDisplay
         {
             get
             {
-                string fromVer = BaselineInstalledBuild != null && !string.IsNullOrWhiteSpace(BaselineInstalledBuild.Version) && BaselineInstalledBuild.Version != "Unknown" && !BaselineInstalledBuild.Version.Contains("Not Installed")
-                    ? BaselineInstalledBuild.Version
-                    : (CurrentPhpBuild != null && !string.IsNullOrWhiteSpace(CurrentPhpBuild.Version) && CurrentPhpBuild.Version != "Unknown" && !CurrentPhpBuild.Version.Contains("Not Installed")
-                        ? CurrentPhpBuild.Version
-                        : "Current");
+                string fromVer = !string.IsNullOrWhiteSpace(BaselineInstalledVersion) && BaselineInstalledVersion != "Detecting..." && !BaselineInstalledVersion.Contains("Not Installed")
+                    ? BaselineInstalledVersion
+                    : (!string.IsNullOrWhiteSpace(CurrentInstalledVersion) && CurrentInstalledVersion != "Detecting..." ? CurrentInstalledVersion : "Current");
 
-                string toVer = IncomingPhpBuild != null && !string.IsNullOrWhiteSpace(IncomingPhpBuild.Version) && IncomingPhpBuild.Version != "Unknown"
-                    ? IncomingPhpBuild.Version
-                    : (string.IsNullOrWhiteSpace(IncomingDetectedVersion) || IncomingDetectedVersion == "Pending..." ? "Target" : IncomingDetectedVersion);
+                string toVer = !string.IsNullOrWhiteSpace(IncomingDetectedVersion) && IncomingDetectedVersion != "Pending..."
+                    ? IncomingDetectedVersion
+                    : "Target";
 
                 if (fromVer == toVer && IsCompleted && IsSuccess && !IsTestMode)
                 {
-                    return $"PHP successfully updated to v{toVer}";
+                    return $"phpMyAdmin successfully updated to v{toVer}";
                 }
 
-                return $"Update PHP from v{fromVer} → v{toVer}";
+                return $"Update phpMyAdmin from v{fromVer} → v{toVer}";
             }
         }
 
@@ -144,8 +119,8 @@ namespace XamppUpdate.ViewModels
 
         public event Action? RequestClose;
 
-        public PhpWizardViewModel(
-            IPhpUpdateService updateService,
+        public PhpMyAdminWizardViewModel(
+            IPhpMyAdminUpdateService updateService,
             ISettingsService settingsService,
             IVersionDetectionService versionDetectionService)
         {
@@ -160,14 +135,10 @@ namespace XamppUpdate.ViewModels
         public async Task LoadCurrentVersionAsync()
         {
             var settings = _settingsService.CurrentSettings;
-            var detected = await _versionDetectionService.DetectPhpBuildInfoAsync(settings.Php.InstallationPath);
-            CurrentPhpBuild = detected;
-            CurrentInstalledVersion = detected.FullDisplayString;
-
-            if (BaselineInstalledBuild == null || string.IsNullOrWhiteSpace(BaselineInstalledVersion))
+            CurrentInstalledVersion = await _versionDetectionService.DetectPhpMyAdminVersionAsync(settings.PhpMyAdmin.InstallationPath);
+            if (string.IsNullOrWhiteSpace(BaselineInstalledVersion) || BaselineInstalledVersion == "Detecting...")
             {
-                BaselineInstalledBuild = detected;
-                BaselineInstalledVersion = detected.Version;
+                BaselineInstalledVersion = CurrentInstalledVersion;
                 OnPropertyChanged(nameof(VersionTransitionDisplay));
             }
         }
@@ -177,8 +148,8 @@ namespace XamppUpdate.ViewModels
         {
             var dialog = new OpenFileDialog
             {
-                Title = "Select PHP Distribution Archive (.zip or .7z)",
-                Filter = "PHP Archives (*.zip;*.7z)|*.zip;*.7z|ZIP Archives (*.zip)|*.zip|7-Zip Archives (*.7z)|*.7z|All Files (*.*)|*.*"
+                Title = "Select phpMyAdmin Archive Package",
+                Filter = "Archive Files (*.zip;*.7z;*.tar.gz)|*.zip;*.7z;*.tar.gz|All Files (*.*)|*.*"
             };
 
             if (dialog.ShowDialog() == true)
@@ -193,7 +164,7 @@ namespace XamppUpdate.ViewModels
         {
             var dialog = new OpenFolderDialog
             {
-                Title = "Select Pre-Extracted PHP Directory"
+                Title = "Select Pre-Extracted phpMyAdmin Directory"
             };
 
             if (dialog.ShowDialog() == true)
@@ -204,30 +175,13 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
-        public void OpenPhpOfficialUrl()
+        public void OpenPhpMyAdminOfficialUrl()
         {
             try
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = "https://www.php.net",
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                ErrorMessage = $"Could not open browser: {ex.Message}";
-            }
-        }
-
-        [RelayCommand]
-        public void OpenPhpDownloadUrl()
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "https://windows.php.net/download/",
+                    FileName = "https://www.phpmyadmin.net/downloads/",
                     UseShellExecute = true
                 });
             }
@@ -242,13 +196,13 @@ namespace XamppUpdate.ViewModels
         {
             if (string.IsNullOrWhiteSpace(SourcePathOrUrl))
             {
-                ErrorMessage = "Please provide a valid PHP archive path or URL.";
+                ErrorMessage = "Please provide a valid phpMyAdmin archive path or URL.";
                 return;
             }
 
             ErrorMessage = string.Empty;
             IsBusy = true;
-            StatusMessage = "Extracting and inspecting PHP distribution...";
+            StatusMessage = "Extracting and inspecting phpMyAdmin package...";
             ProgressPercentage = 0;
             IsIndeterminateProgress = true;
             _cts = new CancellationTokenSource();
@@ -263,12 +217,10 @@ namespace XamppUpdate.ViewModels
             try
             {
                 PreparedIncomingRoot = await _updateService.PrepareIncomingSourceAsync(SourcePathOrUrl, progress, _cts.Token);
-                IncomingPhpBuild = await _versionDetectionService.DetectPhpBuildInfoAsync(PreparedIncomingRoot);
-                IncomingDetectedVersion = IncomingPhpBuild.FullDisplayString;
-                IsIncomingCompatibleWithApache = IncomingPhpBuild.IsApacheCompatible;
+                IncomingDetectedVersion = await _versionDetectionService.DetectPhpMyAdminVersionAsync(PreparedIncomingRoot);
 
                 // Load config diffs
-                StatusMessage = "Comparing PHP configuration files (php.ini)...";
+                StatusMessage = "Comparing phpMyAdmin configuration files (config.inc.php)...";
                 DiffItems.Clear();
                 var diffs = await _updateService.InspectConfigurationsAsync(PreparedIncomingRoot);
 
@@ -365,7 +317,7 @@ namespace XamppUpdate.ViewModels
                     else
                     {
                         await LoadCurrentVersionAsync();
-                        StatusMessage = "PHP updated successfully! Apache restarted cleanly.";
+                        StatusMessage = "phpMyAdmin updated successfully!";
                     }
                 }
                 else
@@ -405,15 +357,15 @@ namespace XamppUpdate.ViewModels
             if (IsExecuting) return;
 
             bool confirmed = ConfirmAction(
-                "Are you sure you want to proceed with the REAL PHP Update?\n\n" +
-                "• Your existing PHP directory will be backed up to a .zip archive.\n" +
-                "• Apache service will be stopped, new PHP binaries will be installed, and configuration applied.\n\n" +
+                "Are you sure you want to proceed with the REAL phpMyAdmin Update?\n\n" +
+                "• Your existing phpMyAdmin directory will be backed up to a .zip archive.\n" +
+                "• phpMyAdmin files will be updated, preserving config.inc.php settings.\n\n" +
                 "Do you want to proceed?",
-                "Confirm Real PHP Update");
+                "Confirm Real phpMyAdmin Update");
 
             if (!confirmed)
             {
-                StatusMessage = "PHP update cancelled by user.";
+                StatusMessage = "phpMyAdmin update cancelled by user.";
                 return;
             }
 
@@ -449,6 +401,32 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
+        public async Task OpenConfigFileAsync()
+        {
+            try
+            {
+                var settings = _settingsService.CurrentSettings;
+                string configPath = Path.Combine(settings.PhpMyAdmin.InstallationPath, settings.PhpMyAdmin.ConfigFile);
+                if (!File.Exists(configPath))
+                {
+                    configPath = Path.Combine(settings.PhpMyAdmin.InstallationPath, "config.inc.php");
+                }
+
+                if (File.Exists(configPath))
+                {
+                    string editor = await Task.Run(() => ComposerViewModel.ResolveTextEditorExecutable());
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = editor,
+                        Arguments = $"\"{configPath}\"",
+                        UseShellExecute = true
+                    });
+                }
+            }
+            catch { }
+        }
+
+        [RelayCommand]
         public void CancelOrClose()
         {
             if (IsExecuting)
@@ -460,7 +438,24 @@ namespace XamppUpdate.ViewModels
 
             if (!string.IsNullOrWhiteSpace(PreparedIncomingRoot))
             {
-                _updateService.CleanupTempDirectory(PreparedIncomingRoot);
+                try
+                {
+                    string tempBase = _settingsService.CurrentSettings.General.ResolvedTempDirectory;
+                    if (PreparedIncomingRoot.StartsWith(tempBase, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string topTempDir = PreparedIncomingRoot;
+                        while (topTempDir.Length > tempBase.Length && Path.GetDirectoryName(topTempDir) != null && !Path.GetDirectoryName(topTempDir)!.Equals(tempBase, StringComparison.OrdinalIgnoreCase))
+                        {
+                            topTempDir = Path.GetDirectoryName(topTempDir)!;
+                        }
+                        _updateService.CleanupTempDirectory(topTempDir);
+                    }
+                    else
+                    {
+                        _updateService.CleanupTempDirectory(PreparedIncomingRoot);
+                    }
+                }
+                catch { }
             }
 
             RequestClose?.Invoke();

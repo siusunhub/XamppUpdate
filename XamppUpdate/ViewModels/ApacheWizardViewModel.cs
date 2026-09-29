@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -18,6 +19,9 @@ namespace XamppUpdate.ViewModels
         private readonly ISettingsService _settingsService;
         private readonly IVersionDetectionService _versionDetectionService;
         private CancellationTokenSource? _cts;
+
+        public Func<string, string, bool> ConfirmAction { get; set; } = (msg, title) =>
+            MessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
 
         [ObservableProperty]
         private int _currentStepIndex;
@@ -100,19 +104,38 @@ namespace XamppUpdate.ViewModels
         [ObservableProperty]
         private string _errorMessage = string.Empty;
 
+        [ObservableProperty]
+        private bool _canSkipBackup;
+
+        [ObservableProperty]
+        private bool _skipBackupDuringRealUpdate;
+
         public ObservableCollection<ConfigDiffItem> DiffItems { get; } = new();
         public ObservableCollection<string> ExecutionLogs { get; } = new();
 
         public event Action? RequestClose;
+        public event Action? RequestOpenGenerateDefaultCert;
+
+        [RelayCommand]
+        public void OpenGenerateDefaultCert()
+        {
+            RequestOpenGenerateDefaultCert?.Invoke();
+        }
+
+        private readonly ISslCertificateService _sslCertificateService;
+        public ISslCertificateService SslCertificateService => _sslCertificateService;
+        public ISettingsService SettingsService => _settingsService;
 
         public ApacheWizardViewModel(
             IApacheUpdateService updateService,
             ISettingsService settingsService,
-            IVersionDetectionService versionDetectionService)
+            IVersionDetectionService versionDetectionService,
+            ISslCertificateService? sslCertificateService = null)
         {
             _updateService = updateService;
             _settingsService = settingsService;
             _versionDetectionService = versionDetectionService;
+            _sslCertificateService = sslCertificateService ?? new SslCertificateService();
 
             CurrentStepIndex = 0;
             _ = LoadCurrentVersionAsync();
@@ -142,6 +165,21 @@ namespace XamppUpdate.ViewModels
             if (dialog.ShowDialog() == true)
             {
                 SourcePathOrUrl = dialog.FileName;
+                IsLocalSource = true;
+            }
+        }
+
+        [RelayCommand]
+        public void BrowseLocalFolder()
+        {
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Select Pre-Extracted Apache Directory"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                SourcePathOrUrl = dialog.FolderName;
                 IsLocalSource = true;
             }
         }
@@ -292,7 +330,8 @@ namespace XamppUpdate.ViewModels
             try
             {
                 var diffList = new System.Collections.Generic.List<ConfigDiffItem>(DiffItems);
-                bool success = await _updateService.ExecuteUpdatePipelineAsync(PreparedIncomingRoot, diffList, IsTestMode, progress, _cts.Token);
+                bool shouldSkipBackup = !IsTestMode && CanSkipBackup && SkipBackupDuringRealUpdate;
+                bool success = await _updateService.ExecuteUpdatePipelineAsync(PreparedIncomingRoot, diffList, IsTestMode, shouldSkipBackup, progress, _cts.Token);
 
                 IsSuccess = success;
                 IsCompleted = true;
@@ -302,7 +341,8 @@ namespace XamppUpdate.ViewModels
                     if (IsTestMode)
                     {
                         IsTestCompleted = true;
-                        StatusMessage = "Test simulation completed successfully! Ready to re-test or execute real update.";
+                        CanSkipBackup = true;
+                        StatusMessage = "Simulation completed successfully! Ready for real update.";
                     }
                     else
                     {
@@ -344,6 +384,21 @@ namespace XamppUpdate.ViewModels
         [RelayCommand]
         public async Task ExecuteRealUpdateAsync()
         {
+            if (IsExecuting) return;
+
+            bool confirmed = ConfirmAction(
+                "Are you sure you want to proceed with the REAL Apache Update?\n\n" +
+                "• Your existing Apache installation will be backed up to a .zip archive.\n" +
+                "• Apache service will be stopped, updated binaries copied, and configuration applied.\n\n" +
+                "Do you want to proceed?",
+                "Confirm Real Apache Update");
+
+            if (!confirmed)
+            {
+                StatusMessage = "Apache update cancelled by user.";
+                return;
+            }
+
             IsTestMode = false;
             IsCompleted = false;
             IsTestCompleted = false;
@@ -361,6 +416,18 @@ namespace XamppUpdate.ViewModels
         public async Task ExecuteRealUpdateAfterTestAsync()
         {
             await ExecuteRealUpdateAsync();
+        }
+
+        [RelayCommand]
+        public void CopyExecutionLogs()
+        {
+            if (ExecutionLogs.Count == 0) return;
+            try
+            {
+                string text = string.Join(Environment.NewLine, ExecutionLogs);
+                Clipboard.SetText(text);
+            }
+            catch { }
         }
 
         [RelayCommand]

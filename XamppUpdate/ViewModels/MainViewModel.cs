@@ -31,6 +31,8 @@ namespace XamppUpdate.ViewModels
         public event Action? RequestOpenSettings;
         public event Action? RequestOpenApacheWizard;
         public event Action? RequestOpenPhpWizard;
+        public event Action? RequestOpenMySqlWizard;
+        public event Action? RequestOpenPhpMyAdminWizard;
         public event Action? RequestOpenSslManager;
         public event Action? RequestOpenComposer;
 
@@ -58,7 +60,7 @@ namespace XamppUpdate.ViewModels
                 Name = "Apache",
                 DisplayName = "Apache HTTP Server",
                 Description = "Core web server executable and modules",
-                IconGlyph = "🪶",
+                IconGlyph = "🌐",
                 CanUpdate = true,
                 IsUnderConstruction = false,
                 Status = ServiceStatus.Unknown,
@@ -87,8 +89,22 @@ namespace XamppUpdate.ViewModels
                 DisplayName = "MySQL / MariaDB Database",
                 Description = "Database server daemon and storage engine",
                 IconGlyph = "🐬",
-                CanUpdate = false,
-                IsUnderConstruction = true,
+                CanUpdate = true,
+                IsUnderConstruction = false,
+                Status = ServiceStatus.Unknown,
+                StatusText = "Checking..."
+            });
+
+            // 4. phpMyAdmin
+            Services.Add(new ServiceItem
+            {
+                Type = ServiceType.PhpMyAdmin,
+                Name = "phpMyAdmin",
+                DisplayName = "phpMyAdmin Web Interface",
+                Description = "Web-based MySQL and MariaDB administration tool",
+                IconGlyph = "📑",
+                CanUpdate = true,
+                IsUnderConstruction = false,
                 Status = ServiceStatus.Unknown,
                 StatusText = "Checking..."
             });
@@ -104,8 +120,8 @@ namespace XamppUpdate.ViewModels
                 CanManageSsl = true,
                 CanUpdate = false,
                 IsUnderConstruction = false,
-                Status = ServiceStatus.Running,
-                StatusText = "Active"
+                Status = ServiceStatus.Unknown,
+                StatusText = "Checking..."
             });
 
             // 5. Composer
@@ -119,8 +135,8 @@ namespace XamppUpdate.ViewModels
                 CanManageComposer = true,
                 CanUpdate = false,
                 IsUnderConstruction = false,
-                Status = ServiceStatus.Running,
-                StatusText = "Active"
+                Status = ServiceStatus.Unknown,
+                StatusText = "Checking..."
             });
         }
 
@@ -160,24 +176,70 @@ namespace XamppUpdate.ViewModels
                     case ServiceType.Php:
                         item.InstallPath = settings.Php.InstallationPath;
                         item.Version = await _versionDetectionService.DetectPhpVersionAsync(item.InstallPath);
-                        item.Status = ServiceStatus.Running;
-                        item.StatusText = "Active";
+                        if (!string.IsNullOrWhiteSpace(item.InstallPath) && Directory.Exists(item.InstallPath) && !item.Version.StartsWith("Not Installed", StringComparison.OrdinalIgnoreCase) && !item.Version.StartsWith("Executable Not Found", StringComparison.OrdinalIgnoreCase))
+                        {
+                            item.Status = ServiceStatus.Running;
+                            item.StatusText = "Active";
+                        }
+                        else
+                        {
+                            item.Status = ServiceStatus.Stopped;
+                            item.StatusText = "Not Installed";
+                        }
                         break;
 
                     case ServiceType.MySql:
                         item.InstallPath = settings.MySql.InstallationPath;
                         item.ServiceName = settings.MySql.ServiceName;
                         item.Version = await _versionDetectionService.DetectMySqlVersionAsync(item.InstallPath);
+                        item.CanUpdate = true;
+                        item.IsUnderConstruction = false;
+                        if (_serviceManager.ServiceExists(item.ServiceName))
+                        {
+                            var svcStatus = await _serviceManager.GetServiceStatusAsync(item.ServiceName);
+                            item.Status = svcStatus == ServiceControllerStatus.Running ? ServiceStatus.Running : ServiceStatus.Stopped;
+                            item.StatusText = svcStatus.HasValue ? svcStatus.Value.ToString() : "Stopped";
+                        }
+                        else
+                        {
+                            item.Status = ServiceStatus.Stopped;
+                            item.StatusText = "Service Not Installed";
+                        }
+                        break;
+
+                    case ServiceType.PhpMyAdmin:
+                        item.InstallPath = settings.PhpMyAdmin.InstallationPath;
+                        item.Version = await _versionDetectionService.DetectPhpMyAdminVersionAsync(item.InstallPath);
+                        item.CanUpdate = true;
+                        item.IsUnderConstruction = false;
+                        if (!string.IsNullOrWhiteSpace(item.InstallPath) && Directory.Exists(item.InstallPath) && !item.Version.StartsWith("Not Installed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            item.Status = ServiceStatus.Running;
+                            item.StatusText = "Active";
+                        }
+                        else
+                        {
+                            item.Status = ServiceStatus.Stopped;
+                            item.StatusText = string.IsNullOrWhiteSpace(item.InstallPath) ? "Not Configured" : "Not Installed";
+                        }
                         break;
 
                     case ServiceType.Ssl:
                         item.InstallPath = Path.Combine(settings.Apache.InstallationPath, "conf");
                         item.Version = "SSL / TLS 1.3";
-                        item.Status = ServiceStatus.Running;
-                        item.StatusText = "Active";
                         item.CanManageSsl = true;
                         item.CanUpdate = false;
                         item.IsUnderConstruction = false;
+                        if (Directory.Exists(item.InstallPath))
+                        {
+                            item.Status = ServiceStatus.Running;
+                            item.StatusText = "Active";
+                        }
+                        else
+                        {
+                            item.Status = ServiceStatus.Stopped;
+                            item.StatusText = "Disabled";
+                        }
                         break;
 
                     case ServiceType.Composer:
@@ -186,8 +248,16 @@ namespace XamppUpdate.ViewModels
                         item.CanManageComposer = true;
                         item.CanUpdate = false;
                         item.IsUnderConstruction = false;
-                        item.Status = ServiceStatus.Running;
-                        item.StatusText = "Active";
+                        if (!string.IsNullOrWhiteSpace(item.InstallPath) && File.Exists(item.InstallPath) && !item.Version.StartsWith("Not Installed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            item.Status = ServiceStatus.Running;
+                            item.StatusText = "Ready";
+                        }
+                        else
+                        {
+                            item.Status = ServiceStatus.Stopped;
+                            item.StatusText = string.IsNullOrWhiteSpace(item.InstallPath) ? "Not Configured" : "Not Installed";
+                        }
                         break;
                 }
 
@@ -217,6 +287,18 @@ namespace XamppUpdate.ViewModels
         }
 
         [RelayCommand]
+        public void StartMySqlUpdate()
+        {
+            RequestOpenMySqlWizard?.Invoke();
+        }
+
+        [RelayCommand]
+        public void StartPhpMyAdminUpdate()
+        {
+            RequestOpenPhpMyAdminWizard?.Invoke();
+        }
+
+        [RelayCommand]
         public void StartComposerManagement()
         {
             RequestOpenComposer?.Invoke();
@@ -239,6 +321,14 @@ namespace XamppUpdate.ViewModels
             else if (item.Type == ServiceType.Php)
             {
                 StartPhpUpdate();
+            }
+            else if (item.Type == ServiceType.MySql)
+            {
+                StartMySqlUpdate();
+            }
+            else if (item.Type == ServiceType.PhpMyAdmin)
+            {
+                StartPhpMyAdminUpdate();
             }
             else if (item.Type == ServiceType.Composer)
             {

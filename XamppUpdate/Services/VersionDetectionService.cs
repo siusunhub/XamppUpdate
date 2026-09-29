@@ -206,6 +206,18 @@ namespace XamppUpdate.Services
                 string mysqldExe = Path.Combine(installationPath, "bin", "mysqld.exe");
                 if (!File.Exists(mysqldExe))
                 {
+                    mysqldExe = Path.Combine(installationPath, "bin", "mariadbd.exe");
+                }
+                if (!File.Exists(mysqldExe))
+                {
+                    mysqldExe = Path.Combine(installationPath, "mysqld.exe");
+                }
+                if (!File.Exists(mysqldExe))
+                {
+                    mysqldExe = Path.Combine(installationPath, "mariadbd.exe");
+                }
+                if (!File.Exists(mysqldExe))
+                {
                     return "Executable Not Found";
                 }
 
@@ -215,7 +227,13 @@ namespace XamppUpdate.Services
                     var match = Regex.Match(output, @"Ver\s+([0-9\.\-A-Za-z]+)");
                     if (match.Success)
                     {
-                        return match.Groups[1].Value;
+                        string ver = match.Groups[1].Value;
+                        if (output.Contains("MariaDB", StringComparison.OrdinalIgnoreCase) &&
+                            !ver.Contains("MariaDB", StringComparison.OrdinalIgnoreCase))
+                        {
+                            ver += "-MariaDB";
+                        }
+                        return ver;
                     }
                 }
                 catch { }
@@ -225,7 +243,14 @@ namespace XamppUpdate.Services
                     var versionInfo = FileVersionInfo.GetVersionInfo(mysqldExe);
                     if (!string.IsNullOrWhiteSpace(versionInfo.ProductVersion))
                     {
-                        return versionInfo.ProductVersion.Trim();
+                        string pVer = versionInfo.ProductVersion.Trim();
+                        if ((versionInfo.FileDescription?.Contains("MariaDB", StringComparison.OrdinalIgnoreCase) == true ||
+                             versionInfo.ProductName?.Contains("MariaDB", StringComparison.OrdinalIgnoreCase) == true) &&
+                            !pVer.Contains("MariaDB", StringComparison.OrdinalIgnoreCase))
+                        {
+                            pVer += "-MariaDB";
+                        }
+                        return pVer;
                     }
                 }
                 catch { }
@@ -283,24 +308,149 @@ namespace XamppUpdate.Services
             });
         }
 
+        public async Task<string> DetectPhpMyAdminVersionAsync(string installationPath)
+        {
+            return await Task.Run(() =>
+            {
+                if (string.IsNullOrWhiteSpace(installationPath) || !Directory.Exists(installationPath))
+                {
+                    return "Not Installed / Path Invalid";
+                }
+
+                try
+                {
+                    // 1. Check RELEASE-DATE-* file in root directory (standard in official PMA packages)
+                    var releaseFiles = Directory.GetFiles(installationPath, "RELEASE-DATE-*", SearchOption.TopDirectoryOnly);
+                    if (releaseFiles.Length > 0)
+                    {
+                        string fileName = Path.GetFileName(releaseFiles[0]);
+                        string ver = fileName.Substring("RELEASE-DATE-".Length).Trim();
+                        if (!string.IsNullOrWhiteSpace(ver))
+                        {
+                            return ver;
+                        }
+                    }
+
+                    // 2. Check package.json / composer.json
+                    string packageJson = Path.Combine(installationPath, "package.json");
+                    if (File.Exists(packageJson))
+                    {
+                        string content = File.ReadAllText(packageJson);
+                        var match = Regex.Match(content, @"""version""\s*:\s*""([^""]+)""");
+                        if (match.Success) return match.Groups[1].Value.Trim();
+                    }
+
+                    string composerJson = Path.Combine(installationPath, "composer.json");
+                    if (File.Exists(composerJson))
+                    {
+                        string content = File.ReadAllText(composerJson);
+                        var match = Regex.Match(content, @"""version""\s*:\s*""([^""]+)""");
+                        if (match.Success) return match.Groups[1].Value.Trim();
+                    }
+
+                    // 3. Check libraries/classes/Version.php or libraries/vendor_config.php
+                    var candidatePhpFiles = new[]
+                    {
+                        Path.Combine(installationPath, "libraries", "classes", "Version.php"),
+                        Path.Combine(installationPath, "libraries", "Version.php"),
+                        Path.Combine(installationPath, "libraries", "vendor_config.php")
+                    };
+
+                    foreach (var phpFile in candidatePhpFiles)
+                    {
+                        if (File.Exists(phpFile))
+                        {
+                            string content = File.ReadAllText(phpFile);
+                            var match = Regex.Match(content, @"(?:const\s+VERSION|define\('PMA_VERSION',\s*|\$VERSION\s*=\s*)['""]([^'""]+)['""]");
+                            if (match.Success) return match.Groups[1].Value.Trim();
+                        }
+                    }
+
+                    // 4. Check ChangeLog / README
+                    string changeLog = Path.Combine(installationPath, "ChangeLog");
+                    if (File.Exists(changeLog))
+                    {
+                        using var reader = new StreamReader(changeLog);
+                        for (int i = 0; i < 30; i++)
+                        {
+                            string? line = reader.ReadLine();
+                            if (line == null) break;
+                            var match = Regex.Match(line, @"(?:phpMyAdmin\s+Version|Version|Release)\s+([0-9\.]+(?:-[a-zA-Z0-9\.]+)?)", RegexOptions.IgnoreCase);
+                            if (match.Success) return match.Groups[1].Value.Trim();
+                        }
+                    }
+
+                    // If folder has index.php and config.inc.php
+                    if (File.Exists(Path.Combine(installationPath, "index.php")))
+                    {
+                        return "Detected (Version Unknown)";
+                    }
+                }
+                catch { }
+
+                return "Unknown Version";
+            });
+        }
+
         private static string ExecuteProcess(string fileName, string arguments)
         {
-            var psi = new ProcessStartInfo
+            try
             {
-                FileName = fileName,
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+                var psi = new ProcessStartInfo
+                {
+                    FileName = fileName,
+                    Arguments = arguments,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
 
-            using var process = Process.Start(psi);
-            if (process == null) return string.Empty;
+                using var process = new Process { StartInfo = psi };
+                var sb = new System.Text.StringBuilder();
+                object lockObj = new object();
 
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(3000);
-            return output;
+                process.OutputDataReceived += (_, e) =>
+                {
+                    if (e.Data != null)
+                    {
+                        lock (lockObj)
+                        {
+                            sb.AppendLine(e.Data);
+                        }
+                    }
+                };
+
+                process.ErrorDataReceived += (_, e) =>
+                {
+                    if (e.Data != null)
+                    {
+                        lock (lockObj)
+                        {
+                            sb.AppendLine(e.Data);
+                        }
+                    }
+                };
+
+                if (!process.Start()) return string.Empty;
+
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                if (!process.WaitForExit(2000))
+                {
+                    try { process.Kill(); } catch { }
+                }
+
+                lock (lockObj)
+                {
+                    return sb.ToString();
+                }
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
     }
 }

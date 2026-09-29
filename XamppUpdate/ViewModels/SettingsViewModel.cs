@@ -32,6 +32,9 @@ namespace XamppUpdate.ViewModels
         private string _mySqlServiceName = string.Empty;
 
         [ObservableProperty]
+        private string _phpMyAdminInstallationPath = string.Empty;
+
+        [ObservableProperty]
         private string _composerExecutablePath = string.Empty;
 
         [ObservableProperty]
@@ -79,6 +82,8 @@ namespace XamppUpdate.ViewModels
             MySqlInstallationPath = s.MySql.InstallationPath;
             MySqlServiceName = s.MySql.ServiceName;
 
+            PhpMyAdminInstallationPath = s.PhpMyAdmin.InstallationPath;
+
             ComposerExecutablePath = s.Composer.ExecutablePath;
             ComposerDownloadTargetPath = s.Composer.DownloadTargetPath;
             ComposerWwwTargetPath = s.Composer.WwwTargetPath;
@@ -108,6 +113,8 @@ namespace XamppUpdate.ViewModels
 
                 s.MySql.InstallationPath = MySqlInstallationPath;
                 s.MySql.ServiceName = MySqlServiceName;
+
+                s.PhpMyAdmin.InstallationPath = PhpMyAdminInstallationPath;
 
                 s.Composer.ExecutablePath = ComposerExecutablePath;
                 s.Composer.DownloadTargetPath = ComposerDownloadTargetPath;
@@ -184,6 +191,20 @@ namespace XamppUpdate.ViewModels
             if (dialog.ShowDialog() == true)
             {
                 MySqlInstallationPath = dialog.FolderName;
+            }
+        }
+
+        [RelayCommand]
+        public void BrowsePhpMyAdminFolder()
+        {
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Select phpMyAdmin Installation Folder",
+                InitialDirectory = Directory.Exists(PhpMyAdminInstallationPath) ? PhpMyAdminInstallationPath : @"C:\"
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                PhpMyAdminInstallationPath = dialog.FolderName;
             }
         }
 

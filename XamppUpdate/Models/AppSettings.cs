@@ -13,12 +13,13 @@ namespace XamppUpdate.Models
         public MySqlSettings MySql { get; set; } = new();
         public ComposerSettings Composer { get; set; } = new();
         public SslSettings Ssl { get; set; } = new();
+        public PhpMyAdminSettings PhpMyAdmin { get; set; } = new();
     }
 
     public class GeneralSettings
     {
-        public string BackupDirectory { get; set; } = "backup";
-        public string TempDirectory { get; set; } = "temp";
+        public string BackupDirectory { get; set; } = "updatebackup";
+        public string TempDirectory { get; set; } = "updatetemp";
         public int MaxBackupRetentionCount { get; set; } = 10;
         public bool AutoCheckUpdatesOnStartup { get; set; } = false;
 
@@ -98,5 +99,11 @@ namespace XamppUpdate.Models
     {
         public string CertificatesPath { get; set; } = @"C:\xampp\apache\conf\ssl.crt";
         public string KeysPath { get; set; } = @"C:\xampp\apache\conf\ssl.key";
+    }
+
+    public class PhpMyAdminSettings
+    {
+        public string InstallationPath { get; set; } = @"C:\xampp\phpMyAdmin";
+        public string ConfigFile { get; set; } = "config.inc.php";
     }
 }

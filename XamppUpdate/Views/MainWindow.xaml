@@ -84,18 +84,18 @@
                 <!-- Services List Header -->
                 <TextBlock Text="Server Stack Components" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12" />
 
-                <!-- Service Cards ItemsControl -->
-                <ItemsControl ItemsSource="{Binding Services}">
+                <!-- Service Cards ItemsControl with Shared Size Scope for Perfect Parallel Alignment -->
+                <ItemsControl ItemsSource="{Binding Services}" Grid.IsSharedSizeScope="True">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,0,12">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="48" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="180" />
-                                        <ColumnDefinition Width="150" />
-                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="ColVersion" />
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="ColStatus" />
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="ColAction" />
                                     </Grid.ColumnDefinitions>
 
                                     <!-- Service Icon -->
@@ -110,54 +110,54 @@
                                         <TextBlock Text="{Binding InstallPath, StringFormat='Path: {0}'}" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
 
-                                    <!-- Version Info -->
-                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,0,16,0">
+                                    <!-- Version Info (Parallel Aligned) -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="150" Margin="12,0,16,0">
                                         <TextBlock Text="Installed Version" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
                                         <TextBlock Text="{Binding Version}" FontSize="13.5" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,2,0,0" />
                                     </StackPanel>
 
-                                    <!-- Status Badge -->
-                                    <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="8,0,16,0">
+                                    <!-- Status Badge (Parallel Aligned) -->
+                                    <StackPanel Grid.Column="3" VerticalAlignment="Center" MinWidth="140" Margin="12,0,16,0">
                                         <TextBlock Text="Service Status" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4" />
                                         <controls:StatusBadge Status="{Binding Status}" Text="{Binding StatusText}" />
                                     </StackPanel>
 
-                                    <!-- Action Button -->
-                                    <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <!-- Action Button (Parallel Aligned) -->
+                                    <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" MinWidth="180" Margin="12,0,0,0">
                                         <!-- Active SSL Manager Button -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                                 Content="🔒 Manage SSL"
-                                                MinWidth="150" HorizontalContentAlignment="Center"
+                                                MinWidth="175" HorizontalContentAlignment="Center"
                                                 Visibility="{Binding CanManageSsl, Converter={StaticResource BoolToVisConverter}}"
                                                 Command="{Binding DataContext.OpenSslManagerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                Padding="12,7"
+                                                Padding="14,7"
                                                 ToolTip="Manage, inspect, and update SSL certificates" />
 
                                         <!-- Active Composer Manager Button -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                                 Content="📦 Manage Composer"
-                                                MinWidth="150" HorizontalContentAlignment="Center"
+                                                MinWidth="175" HorizontalContentAlignment="Center"
                                                 Visibility="{Binding CanManageComposer, Converter={StaticResource BoolToVisConverter}}"
                                                 Command="{Binding DataContext.OpenComposerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                Padding="12,7"
+                                                Padding="14,7"
                                                 ToolTip="Manage Composer, run self-update, check outdated packages, and update libraries" />
 
-                                        <!-- Active Service Update Button (Apache & PHP) -->
+                                        <!-- Active Service Update Button -->
                                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                                 Content="{Binding UpdateButtonText}"
-                                                MinWidth="150" HorizontalContentAlignment="Center"
+                                                MinWidth="175" HorizontalContentAlignment="Center"
                                                 Visibility="{Binding CanUpdate, Converter={StaticResource BoolToVisConverter}}"
                                                 Command="{Binding DataContext.StartServiceUpdateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}"
-                                                Padding="12,7" />
+                                                Padding="14,7" />
 
                                         <!-- Under Construction Disabled Button -->
                                         <Button Style="{StaticResource SecondaryButtonStyle}"
                                                 Content="Coming Soon"
-                                                MinWidth="150" HorizontalContentAlignment="Center"
+                                                MinWidth="175" HorizontalContentAlignment="Center"
                                                 IsEnabled="False"
                                                 Visibility="{Binding IsUnderConstruction, Converter={StaticResource BoolToVisConverter}}"
-                                                Padding="12,7" />
+                                                Padding="14,7" />
                                     </StackPanel>
                                 </Grid>
                             </Border>

@@ -9,8 +9,8 @@ namespace XamppUpdate
     {
         public const string AppName = "XAMPP Component Updater";
 
-        public static string Version { get; } = ResolveMetadata("BuildVersion", "0.1");
-        public static string BuildNumber { get; } = ResolveMetadata("BuildNumber", "0.1");
+        public static string Version { get; } = ResolveMetadata("BuildVersion", "0.2");
+        public static string BuildNumber { get; } = ResolveMetadata("BuildNumber", "0.2");
         public static string BuildDate { get; } = ResolveBuildDate();
 
         public static string WindowTitle => $"{AppName} v{Version} (Build {BuildNumber} · {BuildDate})";
@@ -49,7 +49,7 @@ namespace XamppUpdate
             }
             catch { }
 
-            return DateTime.UtcNow.ToString("yyyy-MM-dd");
+            return "2026-09-01";
         }
     }
 }

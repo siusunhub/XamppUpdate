@@ -51,11 +51,12 @@ namespace XamppUpdate.Models
 
         public string UpdateButtonText => Type switch
         {
-            ServiceType.Apache => "Update Apache",
-            ServiceType.Php => "Update PHP",
-            ServiceType.MySql => "Update MySQL",
-            ServiceType.Composer => "Manage Composer",
-            _ => "Update"
+            ServiceType.Apache => "🌐 Update Apache",
+            ServiceType.Php => "🐘 Update PHP",
+            ServiceType.MySql => "🐬 Update MySQL",
+            ServiceType.PhpMyAdmin => "📑 Update phpMyAdmin",
+            ServiceType.Composer => "📦 Manage Composer",
+            _ => "🚀 Update"
         };
     }
 }
