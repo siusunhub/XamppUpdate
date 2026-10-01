@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -247,6 +249,100 @@ namespace XamppUpdate.ViewModels
             if (dialog.ShowDialog() == true)
             {
                 ComposerWwwTargetPath = dialog.FolderName;
+            }
+        }
+
+        [RelayCommand]
+        public void BrowseBackupFolder()
+        {
+            string currentPath = Path.IsPathRooted(BackupDirectory)
+                ? BackupDirectory
+                : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, BackupDirectory);
+
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Select Backup Storage Folder",
+                InitialDirectory = Directory.Exists(currentPath) ? currentPath : @"C:\"
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                BackupDirectory = dialog.FolderName;
+            }
+        }
+
+        [RelayCommand]
+        public void BrowseTempFolder()
+        {
+            string currentPath = Path.IsPathRooted(TempDirectory)
+                ? TempDirectory
+                : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TempDirectory);
+
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Select Temporary Working Folder",
+                InitialDirectory = Directory.Exists(currentPath) ? currentPath : @"C:\"
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                TempDirectory = dialog.FolderName;
+            }
+        }
+
+        [RelayCommand]
+        public void ClearTempFiles()
+        {
+            try
+            {
+                string targetDir = Path.IsPathRooted(TempDirectory)
+                    ? TempDirectory
+                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TempDirectory);
+
+                if (!Directory.Exists(targetDir))
+                {
+                    StatusMessage = "Temporary working directory is already empty.";
+                    MessageBox.Show("Temporary working directory does not exist or is already clean.", "Clear Temp Files", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // Quick check if any files exist before opening modal
+                bool hasFiles = false;
+                try
+                {
+                    hasFiles = Directory.EnumerateFileSystemEntries(targetDir).Any();
+                }
+                catch { }
+
+                if (!hasFiles)
+                {
+                    StatusMessage = "Temporary working directory is already clean.";
+                    MessageBox.Show("Temporary working directory is already clean (no files found).", "Clear Temp Files", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var confirm = MessageBox.Show(
+                    $"Are you sure you want to clean up all temporary files and folders in:\n\n{targetDir}\n\nThis will safely remove residual update archives and working directories.",
+                    "Confirm Clear Temporary Files",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (confirm != MessageBoxResult.Yes) return;
+
+                var progressWin = new Views.ClearTempProgressWindow(targetDir)
+                {
+                    Owner = Application.Current.Windows.OfType<Views.SettingsWindow>().FirstOrDefault()
+                };
+
+                progressWin.ShowDialog();
+
+                if (progressWin.DeletedFilesCount > 0 || progressWin.DeletedDirsCount > 0)
+                {
+                    StatusMessage = $"Cleared {progressWin.DeletedFilesCount} file(s) and {progressWin.DeletedDirsCount} folder(s).";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error clearing temp files: {ex.Message}";
+                MessageBox.Show($"Failed to clear temporary files: {ex.Message}", "Clear Temp Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

@@ -40,6 +40,10 @@
                     <Setter Property="Background" Value="#BAE6FD" />
                     <Setter Property="Foreground" Value="#0284C7" />
                 </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.45" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
             </Style.Triggers>
         </Style>
     </UserControl.Resources>
@@ -117,14 +121,38 @@
         <!-- ================= VIEW 1: SIDE-BY-SIDE DIFF ================= -->
         <Grid Grid.Row="1" x:Name="GridDiffView">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <!-- Column Headers -->
                 <RowDefinition Height="Auto" />
                 <!-- Diff Viewport -->
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
+            <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="12,8">
+                <WrapPanel VerticalAlignment="Center">
+                    <CheckBox x:Name="ChkDifferencesOnly" Content="Differences only"
+                              VerticalAlignment="Center" Margin="0,0,20,0"
+                              Checked="DifferencesOnly_Changed" Unchecked="DifferencesOnly_Changed"
+                              ToolTip="Hide unchanged lines while keeping original line numbers" />
+                    <Button x:Name="BtnPreviousDifference" Content="↑ Previous difference"
+                            Click="BtnPreviousDifference_Click" IsEnabled="False"
+                            Style="{StaticResource MiniActionButtonStyle}" Margin="0,0,6,0"
+                            ToolTip="Jump to the previous block of changed lines" />
+                    <Button x:Name="BtnNextDifference" Content="↓ Next difference"
+                            Click="BtnNextDifference_Click" IsEnabled="False"
+                            Style="{StaticResource MiniActionButtonStyle}" Margin="0,0,12,0"
+                            ToolTip="Jump to the next block of changed lines" />
+                    <Button x:Name="BtnUndoInsert" Content="↶ Undo Insert"
+                            Click="BtnUndoInsert_Click" IsEnabled="False"
+                            Style="{StaticResource MiniActionButtonStyle}" Margin="0,0,12,0"
+                            ToolTip="Undo the last Insert click for this file" />
+                    <TextBlock x:Name="TxtDifferencePosition" Text="No differences"
+                               VerticalAlignment="Center" Foreground="#64748B" FontSize="11" />
+                </WrapPanel>
+            </Border>
+
             <!-- Column Headers -->
-            <Border Grid.Row="0" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="0,6">
+            <Border Grid.Row="1" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="0,6">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -166,8 +194,9 @@
                     </DockPanel>
                 </Grid>
             </Border>
-            <ListBox Grid.Row="1"
-                     ItemsSource="{Binding DiffItem.DiffRows, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            <ListBox Grid.Row="2" x:Name="DiffList"
+                     SelectionChanged="DiffList_SelectionChanged"
+                     IsSynchronizedWithCurrentItem="False"
                      VirtualizingStackPanel.IsVirtualizing="True"
                      VirtualizingStackPanel.VirtualizationMode="Recycling"
                      ScrollViewer.CanContentScroll="True"
@@ -188,7 +217,16 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
-                                    <ContentPresenter HorizontalAlignment="Stretch" />
+                                    <Grid>
+                                        <ContentPresenter HorizontalAlignment="Stretch" />
+                                        <Border x:Name="SelectionOutline" BorderThickness="1"
+                                                BorderBrush="Transparent" IsHitTestVisible="False" />
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="SelectionOutline" Property="BorderBrush" Value="#0284C7" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Setter.Value>
                         </Setter>

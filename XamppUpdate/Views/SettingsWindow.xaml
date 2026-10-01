@@ -204,7 +204,14 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="Backup Storage Directory:" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
-                            <TextBox Grid.Row="1" Style="{StaticResource ModernTextBoxStyle}" Text="{Binding BackupDirectory, UpdateSourceTrigger=PropertyChanged}" />
+                            <Grid Grid.Row="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding BackupDirectory, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="📁 Browse..." Command="{Binding BrowseBackupFolderCommand}" Margin="8,0,0,0" />
+                            </Grid>
                         </Grid>
                         <Grid Margin="0,0,0,8">
                             <Grid.RowDefinitions>
@@ -212,7 +219,14 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="Temporary Working Directory:" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
-                            <TextBox Grid.Row="1" Style="{StaticResource ModernTextBoxStyle}" Text="{Binding TempDirectory, UpdateSourceTrigger=PropertyChanged}" />
+                            <Grid Grid.Row="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding TempDirectory, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="📁 Browse..." Command="{Binding BrowseTempFolderCommand}" Margin="8,0,0,0" />
+                            </Grid>
                         </Grid>
                         <Grid>
                             <Grid.RowDefinitions>
@@ -220,7 +234,10 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <TextBlock Text="Max Backups Retention Count:" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4" />
-                            <TextBox Grid.Row="1" Style="{StaticResource ModernTextBoxStyle}" Text="{Binding MaxBackupRetentionCount, UpdateSourceTrigger=PropertyChanged}" Width="120" HorizontalAlignment="Left" />
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding MaxBackupRetentionCount, UpdateSourceTrigger=PropertyChanged}" Width="120" HorizontalAlignment="Left" />
+                                <Button Style="{StaticResource SecondaryButtonStyle}" Content="🧹 Clear Temp Files" Command="{Binding ClearTempFilesCommand}" Margin="12,0,0,0" ToolTip="Delete all temporary files and folders in the temporary working directory" />
+                            </StackPanel>
                         </Grid>
                     </StackPanel>
                 </Border>

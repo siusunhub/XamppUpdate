@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DiffPlex;
 using DiffPlex.DiffBuilder;
@@ -215,50 +217,96 @@ namespace XamppUpdate.Services
             var incomingList = new List<DiffLineModel>();
             var rowList = new List<DiffRowModel>();
 
-            int maxLines = Math.Max(diff.OldText.Lines.Count, diff.NewText.Lines.Count);
+            int count = Math.Max(diff.OldText.Lines.Count, diff.NewText.Lines.Count);
+            int idx = 0;
 
-            for (int i = 0; i < maxLines; i++)
+            while (idx < count)
             {
-                var oldLine = i < diff.OldText.Lines.Count ? diff.OldText.Lines[i] : null;
-                var newLine = i < diff.NewText.Lines.Count ? diff.NewText.Lines[i] : null;
+                var oldLine = idx < diff.OldText.Lines.Count ? diff.OldText.Lines[idx] : null;
+                var newLine = idx < diff.NewText.Lines.Count ? diff.NewText.Lines[idx] : null;
 
-                var localModel = new DiffLineModel();
-                if (oldLine != null)
+                bool isOldUnchanged = oldLine != null && oldLine.Type == ChangeType.Unchanged;
+                bool isNewUnchanged = newLine != null && newLine.Type == ChangeType.Unchanged;
+
+                if (isOldUnchanged && isNewUnchanged)
                 {
-                    localModel.LineNumber = oldLine.Position;
-                    localModel.Text = oldLine.Text ?? string.Empty;
-                    localModel.Type = MapDiffType(oldLine.Type);
-
-                    if (oldLine.Type == ChangeType.Deleted) dels++;
-                    else if (oldLine.Type == ChangeType.Modified) mods++;
+                    // Unchanged anchor row: both sides identical
+                    AddRow(rowList.Count, oldLine, newLine, DiffLineType.Unchanged, DiffLineType.Unchanged,
+                           localList, incomingList, rowList);
+                    idx++;
                 }
                 else
                 {
-                    localModel.Type = DiffLineType.EmptyPlaceholder;
-                }
-                localList.Add(localModel);
+                    // Collect all lines in this contiguous changed block
+                    var oldBlockLines = new List<DiffPiece>();
+                    var newBlockLines = new List<DiffPiece>();
 
-                var incomingModel = new DiffLineModel();
-                if (newLine != null)
-                {
-                    incomingModel.LineNumber = newLine.Position;
-                    incomingModel.Text = newLine.Text ?? string.Empty;
-                    incomingModel.Type = MapDiffType(newLine.Type);
+                    while (idx < count)
+                    {
+                        var curOld = idx < diff.OldText.Lines.Count ? diff.OldText.Lines[idx] : null;
+                        var curNew = idx < diff.NewText.Lines.Count ? diff.NewText.Lines[idx] : null;
 
-                    if (newLine.Type == ChangeType.Inserted) adds++;
-                }
-                else
-                {
-                    incomingModel.Type = DiffLineType.EmptyPlaceholder;
-                }
-                incomingList.Add(incomingModel);
+                        bool curOldUnchanged = curOld != null && curOld.Type == ChangeType.Unchanged;
+                        bool curNewUnchanged = curNew != null && curNew.Type == ChangeType.Unchanged;
 
-                rowList.Add(new DiffRowModel
-                {
-                    Index = i,
-                    Local = localModel,
-                    Incoming = incomingModel
-                });
+                        if (curOldUnchanged && curNewUnchanged)
+                        {
+                            break; // Reached next anchor
+                        }
+
+                        if (curOld != null && curOld.Type != ChangeType.Imaginary && curOld.Position.HasValue)
+                        {
+                            oldBlockLines.Add(curOld);
+                        }
+
+                        if (curNew != null && curNew.Type != ChangeType.Imaginary && curNew.Position.HasValue)
+                        {
+                            newBlockLines.Add(curNew);
+                        }
+
+                        idx++;
+                    }
+
+                    // Smart block alignment (Key-aware & similarity-aware)
+                    var alignedRows = AlignBlock(oldBlockLines, newBlockLines, item.RelativeFilePath);
+                    foreach (var aligned in alignedRows)
+                    {
+                        var o = aligned.Old;
+                        var n = aligned.New;
+
+                        DiffLineType localType;
+                        DiffLineType incomingType;
+
+                        if (o != null && n != null)
+                        {
+                            if (string.Equals(o.Text, n.Text, StringComparison.Ordinal))
+                            {
+                                localType = DiffLineType.Unchanged;
+                                incomingType = DiffLineType.Unchanged;
+                            }
+                            else
+                            {
+                                localType = DiffLineType.Modified;
+                                incomingType = DiffLineType.Modified;
+                                mods++;
+                            }
+                        }
+                        else if (o != null)
+                        {
+                            localType = DiffLineType.Deleted;
+                            incomingType = DiffLineType.EmptyPlaceholder;
+                            dels++;
+                        }
+                        else
+                        {
+                            localType = DiffLineType.EmptyPlaceholder;
+                            incomingType = DiffLineType.Inserted;
+                            adds++;
+                        }
+
+                        AddRow(rowList.Count, o, n, localType, incomingType, localList, incomingList, rowList);
+                    }
+                }
             }
 
             item.LocalLines = localList;
@@ -268,6 +316,296 @@ namespace XamppUpdate.Services
             item.DeletionsCount = dels;
             item.ModificationsCount = mods;
             item.HasDifferences = (adds > 0 || dels > 0 || mods > 0 || item.LocalExists != item.IncomingExists);
+        }
+
+        private static void AddRow(
+            int rowIndex,
+            DiffPiece? oldPiece,
+            DiffPiece? newPiece,
+            DiffLineType localType,
+            DiffLineType incomingType,
+            List<DiffLineModel> localList,
+            List<DiffLineModel> incomingList,
+            List<DiffRowModel> rowList)
+        {
+            var localModel = new DiffLineModel
+            {
+                LineNumber = (oldPiece != null && localType != DiffLineType.EmptyPlaceholder) ? oldPiece.Position : null,
+                Text = (oldPiece != null && localType != DiffLineType.EmptyPlaceholder) ? oldPiece.Text ?? string.Empty : string.Empty,
+                Type = localType
+            };
+            localList.Add(localModel);
+
+            var incomingModel = new DiffLineModel
+            {
+                LineNumber = (newPiece != null && incomingType != DiffLineType.EmptyPlaceholder) ? newPiece.Position : null,
+                Text = (newPiece != null && incomingType != DiffLineType.EmptyPlaceholder) ? newPiece.Text ?? string.Empty : string.Empty,
+                Type = incomingType
+            };
+            incomingList.Add(incomingModel);
+
+            rowList.Add(new DiffRowModel
+            {
+                Index = rowIndex,
+                Local = localModel,
+                Incoming = incomingModel
+            });
+        }
+
+        private readonly struct AlignedRow
+        {
+            public DiffPiece? Old { get; }
+            public DiffPiece? New { get; }
+
+            public AlignedRow(DiffPiece? oldPiece, DiffPiece? newPiece)
+            {
+                Old = oldPiece;
+                New = newPiece;
+            }
+        }
+
+        private static List<AlignedRow> AlignBlock(List<DiffPiece> oldLines, List<DiffPiece> newLines, string relativePath)
+        {
+            int m = oldLines.Count;
+            int n = newLines.Count;
+
+            if (m == 0 && n == 0) return new List<AlignedRow>();
+
+            if (m == 0)
+            {
+                var result = new List<AlignedRow>(n);
+                foreach (var nl in newLines) result.Add(new AlignedRow(null, nl));
+                return result;
+            }
+
+            if (n == 0)
+            {
+                var result = new List<AlignedRow>(m);
+                foreach (var ol in oldLines) result.Add(new AlignedRow(ol, null));
+                return result;
+            }
+
+            // Fallback to simple sequential alignment if block is excessively large
+            if (m > 200 || n > 200)
+            {
+                var result = new List<AlignedRow>(Math.Max(m, n));
+                int max = Math.Max(m, n);
+                for (int i = 0; i < max; i++)
+                {
+                    result.Add(new AlignedRow(i < m ? oldLines[i] : null, i < n ? newLines[i] : null));
+                }
+                return result;
+            }
+
+            // Needleman-Wunsch Sequence Alignment with Directive Match Bonus
+            const int GapPenalty = -2;
+            int[,] dp = new int[m + 1, n + 1];
+            int[,] dir = new int[m + 1, n + 1]; // 1: Diag (Pair), 2: Left (Insert New), 3: Up (Delete Old)
+
+            for (int i = 1; i <= m; i++)
+            {
+                dp[i, 0] = i * GapPenalty;
+                dir[i, 0] = 3;
+            }
+
+            for (int j = 1; j <= n; j++)
+            {
+                dp[0, j] = j * GapPenalty;
+                dir[0, j] = 2;
+            }
+
+            for (int i = 1; i <= m; i++)
+            {
+                for (int j = 1; j <= n; j++)
+                {
+                    int matchScore = CalculateMatchScore(oldLines[i - 1], newLines[j - 1], relativePath);
+                    int scoreDiag = dp[i - 1, j - 1] + matchScore;
+                    int scoreLeft = dp[i, j - 1] + GapPenalty;
+                    int scoreUp = dp[i - 1, j] + GapPenalty;
+
+                    int bestScore = scoreDiag;
+                    int bestDir = 1;
+
+                    if (scoreLeft > bestScore)
+                    {
+                        bestScore = scoreLeft;
+                        bestDir = 2;
+                    }
+
+                    if (scoreUp > bestScore)
+                    {
+                        bestScore = scoreUp;
+                        bestDir = 3;
+                    }
+
+                    dp[i, j] = bestScore;
+                    dir[i, j] = bestDir;
+                }
+            }
+
+            var reversedRows = new List<AlignedRow>();
+            int currI = m;
+            int currJ = n;
+
+            while (currI > 0 || currJ > 0)
+            {
+                int d = dir[currI, currJ];
+                if (d == 1)
+                {
+                    reversedRows.Add(new AlignedRow(oldLines[currI - 1], newLines[currJ - 1]));
+                    currI--;
+                    currJ--;
+                }
+                else if (d == 2)
+                {
+                    reversedRows.Add(new AlignedRow(null, newLines[currJ - 1]));
+                    currJ--;
+                }
+                else
+                {
+                    reversedRows.Add(new AlignedRow(oldLines[currI - 1], null));
+                    currI--;
+                }
+            }
+
+            reversedRows.Reverse();
+            return reversedRows;
+        }
+
+        private static int CalculateMatchScore(DiffPiece oldPiece, DiffPiece newPiece, string relativePath)
+        {
+            bool oldBlank = string.IsNullOrWhiteSpace(oldPiece.Text);
+            bool newBlank = string.IsNullOrWhiteSpace(newPiece.Text);
+
+            if (oldBlank && newBlank) return 10;
+            if (oldBlank || newBlank) return -50;
+
+            string? oldKey = ExtractDirectiveKey(oldPiece.Text, relativePath);
+            string? newKey = ExtractDirectiveKey(newPiece.Text, relativePath);
+
+            if (oldKey != null && newKey != null)
+            {
+                if (string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return string.Equals(oldPiece.Text.Trim(), newPiece.Text.Trim(), StringComparison.Ordinal) ? 120 : 100;
+                }
+                else
+                {
+                    return -100; // Both are directives, but different keys
+                }
+            }
+
+            if (oldKey != null || newKey != null)
+            {
+                return -50; // One is a directive, one is a comment/documentation
+            }
+
+            // Both are comments or general text lines
+            double sim = ComputeSimilarity(oldPiece.Text, newPiece.Text);
+            if (sim >= 0.6)
+            {
+                return (int)(sim * 30);
+            }
+
+            return 0;
+        }
+
+        private static string? ExtractDirectiveKey(string line, string relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(line)) return null;
+
+            string trimmed = line.Trim();
+
+            // Section Header: [Section]
+            var secMatch = Regex.Match(trimmed, @"^\[(?<sec>[a-zA-Z0-9_\.\-]+)\]$");
+            if (secMatch.Success)
+            {
+                return $"section:{secMatch.Groups["sec"].Value.ToLowerInvariant()}";
+            }
+
+            // INI style directive: key = value or ;key = value
+            var iniMatch = Regex.Match(trimmed, @"^(?:[;#]\s*)?(?<key>[a-zA-Z0-9_\-]+(?:\.[a-zA-Z0-9_\-]+)*)\s*=(?<val>.*)$");
+            if (iniMatch.Success)
+            {
+                string key = iniMatch.Groups["key"].Value.ToLowerInvariant();
+                string val = iniMatch.Groups["val"].Value.Trim().Trim('"', '\'');
+
+                if (key == "extension" || key == "zend_extension")
+                {
+                    return $"{key}:{val.ToLowerInvariant()}";
+                }
+
+                return $"key:{key}";
+            }
+
+            // Apache / Conf style directive: Directive Argument (e.g. LoadModule php_module ... or DocumentRoot "...")
+            if (relativePath.EndsWith(".conf", StringComparison.OrdinalIgnoreCase))
+            {
+                var confMatch = Regex.Match(trimmed, @"^(?:#\s*)?(?<dir>[A-Za-z][A-Za-z0-9_-]+)\s+(?<arg>\S+)(?:.*)$");
+                if (confMatch.Success)
+                {
+                    string dir = confMatch.Groups["dir"].Value.ToLowerInvariant();
+                    string arg = confMatch.Groups["arg"].Value.Trim('"', '\'').ToLowerInvariant();
+
+                    if (dir == "loadmodule")
+                    {
+                        return $"loadmodule:{arg}";
+                    }
+
+                    return $"dir:{dir}";
+                }
+            }
+
+            return null;
+        }
+
+        private static double ComputeSimilarity(string s1, string s2)
+        {
+            if (string.IsNullOrEmpty(s1) && string.IsNullOrEmpty(s2)) return 1.0;
+            if (string.IsNullOrEmpty(s1) || string.IsNullOrEmpty(s2)) return 0.0;
+
+            s1 = s1.Trim();
+            s2 = s2.Trim();
+            if (string.Equals(s1, s2, StringComparison.Ordinal)) return 1.0;
+
+            int maxLen = Math.Max(s1.Length, s2.Length);
+            if (maxLen == 0) return 1.0;
+            if (maxLen > 200)
+            {
+                s1 = s1.Substring(0, Math.Min(s1.Length, 200));
+                s2 = s2.Substring(0, Math.Min(s2.Length, 200));
+                maxLen = 200;
+            }
+
+            int dist = LevenshteinDistance(s1, s2);
+            return 1.0 - ((double)dist / maxLen);
+        }
+
+        private static int LevenshteinDistance(string s, string t)
+        {
+            int n = s.Length;
+            int m = t.Length;
+            if (n == 0) return m;
+            if (m == 0) return n;
+
+            int[] prev = new int[m + 1];
+            int[] curr = new int[m + 1];
+
+            for (int j = 0; j <= m; j++) prev[j] = j;
+
+            for (int i = 1; i <= n; i++)
+            {
+                curr[0] = i;
+                char sc = s[i - 1];
+                for (int j = 1; j <= m; j++)
+                {
+                    int cost = (sc == t[j - 1]) ? 0 : 1;
+                    curr[j] = Math.Min(Math.Min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                }
+                Array.Copy(curr, prev, m + 1);
+            }
+
+            return prev[m];
         }
 
         private static DiffLineType MapDiffType(ChangeType type)

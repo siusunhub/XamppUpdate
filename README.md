@@ -2,7 +2,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://microsoft.com/windows)
 [![Target Framework](https://img.shields.io/badge/.NET-10.0%20WPF-purple.svg)](https://dotnet.microsoft.com/)
-[![Version](https://img.shields.io/badge/Version-0.2.0-green.svg)](https://github.com/)
+[![Version](https://img.shields.io/badge/Version-0.3.0-green.svg)](https://github.com/)
 [![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 
 **XAMPP Component Updater** is a modern, reliable Windows desktop utility designed for developers and system administrators to independently upgrade, manage, and maintain individual core components of an existing [XAMPP](https://www.apachefriends.org/) installation.

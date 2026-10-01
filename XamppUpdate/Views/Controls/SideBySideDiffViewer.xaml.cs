@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Threading;
 using XamppUpdate.Models;
 using XamppUpdate.Services;
@@ -13,6 +15,12 @@ namespace XamppUpdate.Views.Controls
     {
         private readonly IConfigDiffService _diffService = new ConfigDiffService();
         private readonly DispatcherTimer _noticeTimer;
+        private ListCollectionView? _rowsView;
+        private readonly List<DiffRowModel> _differenceSections = new();
+        private int _currentSection = -1;
+        private DiffRowModel? _positionRow;
+        private readonly Stack<InsertUndoState> _insertUndo = new();
+        private sealed record InsertUndoState(string Content, ConfigFileResolution Resolution, bool IsCustomMerged, DiffRowModel Position);
 
         public static readonly DependencyProperty DiffItemProperty =
             DependencyProperty.Register(nameof(DiffItem), typeof(ConfigDiffItem), typeof(SideBySideDiffViewer),
@@ -41,10 +49,152 @@ namespace XamppUpdate.Views.Controls
 
         private static void OnDiffItemChangedCallback(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is SideBySideDiffViewer viewer && e.NewValue is ConfigDiffItem item)
+            if (d is SideBySideDiffViewer viewer)
             {
-                viewer.OnDiffItemAssigned(item);
+                viewer.ClearInsertUndo();
+                viewer._positionRow = null;
+                if (e.OldValue is ConfigDiffItem oldItem)
+                    PropertyChangedEventManager.RemoveHandler(oldItem, viewer.DiffItem_PropertyChanged, nameof(ConfigDiffItem.DiffRows));
+
+                if (e.NewValue is ConfigDiffItem item)
+                {
+                    PropertyChangedEventManager.AddHandler(item, viewer.DiffItem_PropertyChanged, nameof(ConfigDiffItem.DiffRows));
+                    viewer.OnDiffItemAssigned(item);
+                }
+                else
+                {
+                    viewer.TxtDirectEditor.Clear();
+                }
+                viewer.RefreshDiffRows();
             }
+        }
+
+        private void DiffItem_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            RefreshDiffRows();
+        }
+
+        private static bool IsDifferent(DiffRowModel row)
+        {
+            return IsChangedLine(row.Local.Type) || IsChangedLine(row.Incoming.Type);
+        }
+
+        private static bool IsChangedLine(DiffLineType type)
+        {
+            return type is DiffLineType.Inserted or DiffLineType.Deleted or DiffLineType.Modified;
+        }
+
+        private void RefreshDiffRows()
+        {
+            var position = _positionRow;
+            _differenceSections.Clear();
+            _currentSection = -1;
+            var rows = DiffItem?.DiffRows ?? new List<DiffRowModel>();
+            bool previousWasDifferent = false;
+            foreach (var row in rows)
+            {
+                bool different = IsDifferent(row);
+                if (different && !previousWasDifferent)
+                    _differenceSections.Add(row);
+                previousWasDifferent = different;
+            }
+
+            // A private view keeps filtering local to this viewer and leaves merge indices intact.
+            _rowsView = new ListCollectionView(rows);
+            ApplyDifferenceFilter();
+            DiffList.ItemsSource = _rowsView;
+            if (position != null && rows.Count > 0)
+            {
+                // Incoming line numbers stay stable when local lines are inserted or replaced.
+                var restored = rows.FirstOrDefault(row => position.Incoming.LineNumber.HasValue
+                    && row.Incoming.LineNumber == position.Incoming.LineNumber)
+                    ?? rows.FirstOrDefault(row => position.Local.LineNumber.HasValue
+                        && row.Local.LineNumber == position.Local.LineNumber)
+                    ?? rows[Math.Min(position.Index, rows.Count - 1)];
+                SetNavigationPosition(restored);
+                if (_rowsView.Contains(restored))
+                    DiffList.SelectedItem = restored;
+                var visibleRow = _rowsView.Contains(restored) ? restored
+                    : rows.FirstOrDefault(row => row.Index > restored.Index && IsDifferent(row))
+                        ?? rows.LastOrDefault(IsDifferent);
+                if (visibleRow != null) DiffList.ScrollIntoView(visibleRow);
+            }
+            else
+            {
+                _positionRow = null;
+            }
+            UpdateDifferenceNavigation();
+        }
+
+        private void ApplyDifferenceFilter()
+        {
+            if (_rowsView == null) return;
+            _rowsView.Filter = ChkDifferencesOnly.IsChecked == true
+                ? item => item is DiffRowModel row && IsDifferent(row)
+                : null;
+        }
+
+        private void DifferencesOnly_Changed(object sender, RoutedEventArgs e)
+        {
+            var selectedRow = DiffList?.SelectedItem as DiffRowModel;
+            ApplyDifferenceFilter();
+            if (selectedRow != null && _rowsView?.Contains(selectedRow) == true)
+            {
+                DiffList!.SelectedItem = selectedRow;
+                DiffList.ScrollIntoView(selectedRow);
+            }
+        }
+
+        private void BtnPreviousDifference_Click(object sender, RoutedEventArgs e)
+        {
+            JumpToDifference(PreviousSectionIndex);
+        }
+
+        private void BtnNextDifference_Click(object sender, RoutedEventArgs e)
+        {
+            JumpToDifference(_currentSection + 1);
+        }
+
+        private void JumpToDifference(int section)
+        {
+            if (section < 0 || section >= _differenceSections.Count) return;
+            _currentSection = section;
+            var row = _differenceSections[section];
+            SetNavigationPosition(row);
+            DiffList.SelectedItem = row;
+            DiffList.ScrollIntoView(row);
+            UpdateDifferenceNavigation();
+        }
+
+        private void DiffList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (DiffList.SelectedItem is DiffRowModel row)
+            {
+                SetNavigationPosition(row);
+            }
+            UpdateDifferenceNavigation();
+        }
+
+        private void SetNavigationPosition(DiffRowModel row)
+        {
+            _positionRow = row;
+            _currentSection = _differenceSections.FindLastIndex(start => start.Index <= row.Index);
+        }
+
+        private int PreviousSectionIndex => _positionRow != null && !IsDifferent(_positionRow)
+            ? _currentSection : _currentSection - 1;
+
+        private void UpdateDifferenceNavigation()
+        {
+            BtnPreviousDifference.IsEnabled = PreviousSectionIndex >= 0;
+            BtnNextDifference.IsEnabled = _currentSection + 1 < _differenceSections.Count;
+            TxtDifferencePosition.Text = _differenceSections.Count == 0
+                ? "No differences"
+                : _positionRow != null && !IsDifferent(_positionRow)
+                    ? $"Between differences ({_differenceSections.Count} blocks)"
+                : _currentSection < 0
+                    ? $"{_differenceSections.Count} difference block{(_differenceSections.Count == 1 ? "" : "s")}"
+                    : $"Difference {_currentSection + 1} of {_differenceSections.Count}";
         }
 
         private void OnDiffItemAssigned(ConfigDiffItem item)
@@ -99,6 +249,11 @@ namespace XamppUpdate.Views.Controls
         {
             if (DiffItem == null) return;
             if (sender is not Button btn || btn.DataContext is not DiffRowModel row) return;
+            if (!row.Incoming.CanInsert) return;
+
+            SetNavigationPosition(row);
+            _insertUndo.Push(new InsertUndoState(DiffItem.MergedContent, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
+            BtnUndoInsert.IsEnabled = true;
 
             var incomingLine = row.Incoming;
             int index = row.Index;
@@ -157,6 +312,7 @@ namespace XamppUpdate.Views.Controls
         private void BtnApplyDirectEdit_Click(object sender, RoutedEventArgs e)
         {
             if (DiffItem == null) return;
+            ClearInsertUndo();
 
             DiffItem.MergedContent = TxtDirectEditor.Text;
             DiffItem.Resolution = ConfigFileResolution.UseMerged;
@@ -169,6 +325,7 @@ namespace XamppUpdate.Views.Controls
         private void BtnRevertLocal_Click(object sender, RoutedEventArgs e)
         {
             if (DiffItem == null) return;
+            ClearInsertUndo();
 
             TxtDirectEditor.Text = DiffItem.OriginalLocalContent;
             DiffItem.MergedContent = DiffItem.OriginalLocalContent;
@@ -182,6 +339,7 @@ namespace XamppUpdate.Views.Controls
         private void BtnFillIncoming_Click(object sender, RoutedEventArgs e)
         {
             if (DiffItem == null) return;
+            ClearInsertUndo();
 
             TxtDirectEditor.Text = DiffItem.IncomingContent;
             DiffItem.MergedContent = DiffItem.IncomingContent;
@@ -190,6 +348,25 @@ namespace XamppUpdate.Views.Controls
 
             _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
             ShowNotice("✓ Filled editor with incoming default config");
+        }
+
+        private void ClearInsertUndo()
+        {
+            _insertUndo.Clear();
+            BtnUndoInsert.IsEnabled = false;
+        }
+
+        private void BtnUndoInsert_Click(object sender, RoutedEventArgs e)
+        {
+            if (DiffItem == null || !_insertUndo.TryPop(out var state)) return;
+            _positionRow = state.Position;
+            DiffItem.MergedContent = state.Content;
+            DiffItem.Resolution = state.Resolution;
+            DiffItem.IsCustomMerged = state.IsCustomMerged;
+            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
+            TxtDirectEditor.Text = DiffItem.MergedContent;
+            BtnUndoInsert.IsEnabled = _insertUndo.Count > 0;
+            ShowNotice("✓ Undid last incoming line insertion");
         }
 
         private void BtnCopyEditorText_Click(object sender, RoutedEventArgs e)
