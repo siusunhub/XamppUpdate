@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using XamppUpdate.Models;
 using XamppUpdate.Services;
@@ -19,6 +22,8 @@ namespace XamppUpdate.Views.Controls
         private readonly List<DiffRowModel> _differenceSections = new();
         private int _currentSection = -1;
         private DiffRowModel? _positionRow;
+        private TextBox? _lineEditor;
+        private DiffRowModel? _editingRow;
         private readonly Stack<InsertUndoState> _insertUndo = new();
         private sealed record InsertUndoState(string Content, ConfigFileResolution Resolution, bool IsCustomMerged, DiffRowModel Position);
 
@@ -51,6 +56,7 @@ namespace XamppUpdate.Views.Controls
         {
             if (d is SideBySideDiffViewer viewer)
             {
+                viewer.CancelLineEdit();
                 viewer.ClearInsertUndo();
                 viewer._positionRow = null;
                 if (e.OldValue is ConfigDiffItem oldItem)
@@ -86,6 +92,7 @@ namespace XamppUpdate.Views.Controls
 
         private void RefreshDiffRows()
         {
+            CancelLineEdit();
             var position = _positionRow;
             _differenceSections.Clear();
             _currentSection = -1;
@@ -244,6 +251,96 @@ namespace XamppUpdate.Views.Controls
         }
 
 
+
+        private void LocalLine_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton != MouseButton.Left || DiffItem == null
+                || sender is not TextBox editor || editor.DataContext is not DiffRowModel row
+                || !row.Local.LineNumber.HasValue || row.Local.IsPlaceholder) return;
+
+            CancelLineEdit();
+            _lineEditor = editor;
+            _editingRow = row;
+            SetNavigationPosition(row);
+            DiffList.SelectedItem = row;
+            editor.IsReadOnly = false;
+            editor.BorderThickness = new Thickness(1);
+            editor.BorderBrush = Brushes.DeepSkyBlue;
+            editor.Focus();
+            editor.SelectAll();
+            ShowNotice("Edit local line: Enter to save, Esc or click away to cancel");
+            e.Handled = true;
+        }
+
+        private void LocalLine_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (!ReferenceEquals(sender, _lineEditor)) return;
+            if (e.Key == Key.Escape)
+            {
+                CancelLineEdit();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                SaveLineEdit();
+                e.Handled = true;
+            }
+        }
+
+        private void LocalLine_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            if (ReferenceEquals(sender, _lineEditor)) CancelLineEdit();
+        }
+
+        private void LocalLine_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (ReferenceEquals(sender, _lineEditor)) CancelLineEdit();
+        }
+
+        private void LocalLine_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (ReferenceEquals(sender, _lineEditor)) CancelLineEdit();
+        }
+
+        private void CancelLineEdit()
+        {
+            if (_lineEditor == null) return;
+            var editor = _lineEditor;
+            _lineEditor = null;
+            _editingRow = null;
+            editor.IsReadOnly = true;
+            editor.BorderThickness = new Thickness(0);
+            editor.ClearValue(Control.BorderBrushProperty);
+            editor.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget();
+        }
+
+        private void SaveLineEdit()
+        {
+            if (DiffItem == null || _lineEditor == null || _editingRow?.Local.LineNumber is not int lineNumber) return;
+            string text = _lineEditor.Text;
+            if (text.Contains('\r') || text.Contains('\n'))
+            {
+                ShowNotice("Use Direct Edit Local Config to edit multiple lines");
+                return;
+            }
+            var row = _editingRow;
+            // Keep the existing line separators and all other lines exactly as they were.
+            var parts = Regex.Split(DiffItem.MergedContent, "(\\r\\n|\\r|\\n)");
+            int textIndex = (lineNumber - 1) * 2;
+            if (textIndex < 0 || textIndex >= parts.Length) { CancelLineEdit(); return; }
+            bool changed = parts[textIndex] != text;
+            parts[textIndex] = text;
+            CancelLineEdit();
+            if (!changed) return;
+            ClearInsertUndo();
+            SetNavigationPosition(row);
+            DiffItem.MergedContent = string.Concat(parts);
+            DiffItem.Resolution = ConfigFileResolution.UseMerged;
+            DiffItem.IsCustomMerged = true;
+            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
+            TxtDirectEditor.Text = DiffItem.MergedContent;
+            ShowNotice("✓ Saved local line edit");
+        }
 
         private void BtnInsertLine_Click(object sender, RoutedEventArgs e)
         {

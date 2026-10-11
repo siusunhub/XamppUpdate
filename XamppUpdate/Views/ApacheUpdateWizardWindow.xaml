@@ -40,9 +40,9 @@
 
                 <!-- Title & Version Info -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="Apache Update Pipeline" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                    <TextBlock Text="Apache Update Pipeline" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding CurrentInstalledVersion, StringFormat='Active Installed Version: {0}'}"
-                               FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                               FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0" />
                 </StackPanel>
 
                 <!-- Steps Breadcrumb -->
@@ -281,21 +281,45 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Left Side: Default SSL Cert Tool Button -->
-                                    <Button Grid.Column="0"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Content="🛡️ Generate Default SSL Cert"
-                                            Command="{Binding OpenGenerateDefaultCertCommand}"
-                                            Padding="16,10" FontSize="13"
-                                            ToolTip="Renew expired or missing default XAMPP SSL certificates (conf/ssl.crt/server.crt)" />
+                                    <!-- Left Side: Default SSL Cert Tool Button + Manage vHost Button + Service Management Buttons -->
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="🛡️ Generate Default SSL Cert"
+                                                Command="{Binding OpenGenerateDefaultCertCommand}"
+                                                Padding="14,10" FontSize="13"
+                                                ToolTip="Renew expired or missing default XAMPP SSL certificates (conf/ssl.crt/server.crt)" />
+
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="🌐 Manage vHost"
+                                                Command="{Binding OpenVHostManagerCommand}"
+                                                Padding="14,10" FontSize="13"
+                                                Margin="10,0,0,0"
+                                                ToolTip="Add, edit, delete and manage Apache VirtualHost entries in httpd-vhosts.conf" />
+
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="{Binding ServiceInstallButtonText}"
+                                                Command="{Binding ToggleServiceInstallCommand}"
+                                                IsEnabled="{Binding CanToggleServiceInstall}"
+                                                Padding="14,10" FontSize="13"
+                                                Margin="10,0,0,0"
+                                                ToolTip="Install or remove Apache Windows service (only available while Apache is stopped)" />
+
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="{Binding ServiceRunButtonText}"
+                                                Command="{Binding ToggleServiceRunCommand}"
+                                                IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
+                                                Padding="14,10" FontSize="13"
+                                                Margin="10,0,0,0"
+                                                ToolTip="Start or stop Apache (via Windows service if installed, or background process if not installed)" />
+                                    </StackPanel>
 
                                     <!-- Right Side: Next Step Button -->
                                     <Button Grid.Column="2"
                                             Style="{StaticResource PrimaryButtonStyle}"
-                                            Content="🔍 Next: Inspect &amp; Compare Configurations →"
+                                            Content="Next"
                                             Command="{Binding ProcessStep1Command}"
                                             IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
-                                            Padding="20,10" FontSize="13.5" />
+                                            Padding="24,10" FontSize="13.5" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -686,7 +710,12 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="XAMPP Local Server Updater • Step-by-Step Guided Wizard" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                <!-- Left: live service / process state (kept here so it never collides with the step breadcrumb) -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Apache:" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <controls:StatusBadge Status="{Binding ServiceStatus}" Text="{Binding ServiceStatusDisplay}" VerticalAlignment="Center" />
+                    <TextBlock Text="•  XAMPP Local Server Updater" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                </StackPanel>
                 <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="✕ Cancel &amp; Close" Command="{Binding CancelOrCloseCommand}" Padding="12,6" />
             </Grid>
         </Border>

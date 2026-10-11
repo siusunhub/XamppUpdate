@@ -12,5 +12,6 @@ namespace XamppUpdate.Services
         Task<GenerateDefaultSslCertResult> GenerateDefaultCertificateAsync(GenerateDefaultSslCertRequest request, IProgress<string>? progress = null);
         void OpenFileInExplorer(string filePath);
         void OpenCertificateInViewer(string certificateFilePath);
+        Task<SslCertificateInfo> ResolveVHostCertificateAsync(VHostEntry entry, string? apachePath = null);
     }
 }

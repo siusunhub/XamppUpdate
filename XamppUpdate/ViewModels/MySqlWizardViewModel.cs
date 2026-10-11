@@ -164,13 +164,67 @@ namespace XamppUpdate.ViewModels
         private string _upgradeStatusMessage = string.Empty;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ServiceInstallButtonText))]
+        [NotifyPropertyChangedFor(nameof(ServiceRunButtonText))]
+        private bool _isServiceInstalled;
+
+        [ObservableProperty]
+        private ServiceStatus _serviceStatus = ServiceStatus.Unknown;
+
+        [ObservableProperty]
         private string _serviceStatusDisplay = "Checking...";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ServiceRunButtonText))]
+        [NotifyPropertyChangedFor(nameof(CanStartService))]
+        [NotifyPropertyChangedFor(nameof(CanStopService))]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceInstall))]
         private bool _isServiceRunning;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanStartService))]
+        [NotifyPropertyChangedFor(nameof(CanStopService))]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceInstall))]
         private bool _isOperatingService;
+
+        /// <summary>True while the Windows service is in a Start/Stop/Pause/Continue pending state.</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceInstall))]
+        private bool _isServiceTransitioning;
+
+        /// <summary>Install/Remove Service is only allowed in the fully stopped state.</summary>
+        public bool CanToggleServiceInstall => !IsOperatingService && !IsServiceRunning && !IsServiceTransitioning;
+
+        // Start is only meaningful when nothing is running; Stop only when something is.
+        public bool CanStartService => !IsOperatingService && !IsServiceRunning;
+        public bool CanStopService => !IsOperatingService && IsServiceRunning;
+
+        /// <summary>
+        /// True when Start/Stop must go through the Windows service. False when the service is not installed,
+        /// or it is installed but stopped while a standalone mysqld/mariadbd process is running.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ServiceRunButtonText))]
+        [NotifyPropertyChangedFor(nameof(ServiceStartButtonText))]
+        [NotifyPropertyChangedFor(nameof(ServiceStopButtonText))]
+        private bool _useServiceControl;
+
+        private System.Windows.Threading.DispatcherTimer? _statusTimer;
+        private bool _isRefreshingStatus;
+
+        /// <summary>Which mysqld/mariadbd process was detected (empty when none); shown as a tooltip on the status badge.</summary>
+        [ObservableProperty]
+        private string _processDetail = string.Empty;
+
+        public string ServiceInstallButtonText => IsServiceInstalled ? "Remove Service" : "Install Service";
+
+        public string ServiceRunButtonText => IsServiceRunning
+            ? (UseServiceControl ? "Stop Service" : "Stop Process")
+            : (UseServiceControl ? "Start Service" : "Start Process");
+
+        // Labels for the separate Start / Stop buttons on the database step.
+        public string ServiceStartButtonText => UseServiceControl ? "▶️ Start Service" : "▶️ Start Process";
+        public string ServiceStopButtonText => UseServiceControl ? "⏹️ Stop Service" : "⏹️ Stop Process";
 
         public event Action? RequestClose;
 
@@ -190,6 +244,7 @@ namespace XamppUpdate.ViewModels
             CurrentStepIndex = 0;
             _ = LoadCurrentVersionAsync();
             _ = RefreshServiceStatusAsync();
+            StartStatusMonitor();
         }
 
         public async Task LoadCurrentVersionAsync()
@@ -399,6 +454,9 @@ namespace XamppUpdate.ViewModels
             {
                 var diffList = new System.Collections.Generic.List<ConfigDiffItem>(DiffItems);
                 bool shouldSkipBackup = !IsTestMode && CanSkipBackup && SkipBackupDuringRealUpdate;
+                // Used by the safe shutdown that runs before any file is replaced.
+                _updateService.SetShutdownCredentials(MySqlUpgradeUser, MySqlUpgradePassword);
+                _updateService.StartForCleanShutdown = StartMySqlFirstForCleanShutdown;
                 bool success = await _updateService.ExecuteUpdatePipelineAsync(PreparedIncomingRoot, diffList, IsTestMode, shouldSkipBackup, progress, _cts.Token);
 
                 IsSuccess = success;
@@ -515,48 +573,333 @@ namespace XamppUpdate.ViewModels
             CurrentStepIndex = _step4OriginIndex;
         }
 
+        /// <summary>Polls the service/process state so button labels follow changes made outside the app too.</summary>
+        public void StartStatusMonitor()
+        {
+            if (_statusTimer != null) return;
+            _statusTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _statusTimer.Tick += async (_, _) =>
+            {
+                // Don't fight with an in-flight install/remove/start/stop that refreshes on completion.
+                if (IsOperatingService) return;
+                await RefreshServiceStatusAsync();
+            };
+            _statusTimer.Start();
+        }
+
+        public void StopStatusMonitor()
+        {
+            _statusTimer?.Stop();
+            _statusTimer = null;
+        }
+
         public async Task RefreshServiceStatusAsync()
         {
+            if (_isRefreshingStatus) return;
+            _isRefreshingStatus = true;
             try
             {
                 var settings = _settingsService.CurrentSettings;
                 string serviceName = settings.MySql.ServiceName;
-                if (_serviceManager.ServiceExists(serviceName))
+                string mySqlPath = settings.MySql.InstallationPath;
+
+                // Service/process enumeration can be slow; keep it off the UI thread.
+                bool exists = await Task.Run(() => _serviceManager.ServiceExists(serviceName));
+                string? procInfo = await Task.Run(() => _serviceManager.GetRunningMySqlProcessInfo(mySqlPath));
+                bool procRunning = procInfo != null;
+                ProcessDetail = procInfo ?? string.Empty;
+
+                if (exists)
                 {
                     var status = await _serviceManager.GetServiceStatusAsync(serviceName);
-                    ServiceStatusDisplay = status?.ToString() ?? "Unknown";
-                    IsServiceRunning = (status == ServiceControllerStatus.Running);
+                    // StartPending counts as running so the button offers Stop while the service comes up.
+                    bool svcRunning = status == ServiceControllerStatus.Running ||
+                                      status == ServiceControllerStatus.StartPending ||
+                                      status == ServiceControllerStatus.ContinuePending;
+
+                    // A running mysqld while the service is stopped is a standalone process: control it as a process.
+                    IsServiceTransitioning = status is ServiceControllerStatus.StartPending
+                        or ServiceControllerStatus.StopPending
+                        or ServiceControllerStatus.PausePending
+                        or ServiceControllerStatus.ContinuePending;
+                    UseServiceControl = svcRunning || !procRunning;
+                    IsServiceRunning = svcRunning || procRunning;
+                    IsServiceInstalled = true;
+
+                    if (status == ServiceControllerStatus.Running)
+                    {
+                        ServiceStatus = ServiceStatus.Running;
+                        ServiceStatusDisplay = "Running";
+                    }
+                    else if (!svcRunning && procRunning)
+                    {
+                        ServiceStatus = ServiceStatus.Running;
+                        ServiceStatusDisplay = "Process Running (service stopped)";
+                    }
+                    else
+                    {
+                        ServiceStatus = ServiceStatus.Stopped;
+                        ServiceStatusDisplay = status.HasValue ? status.Value.ToString() : "Stopped";
+                    }
                 }
                 else
                 {
-                    ServiceStatusDisplay = "Not Installed";
-                    IsServiceRunning = false;
+                    IsServiceTransitioning = false;
+                    UseServiceControl = false;
+                    IsServiceRunning = procRunning;
+                    IsServiceInstalled = false;
+
+                    if (procRunning)
+                    {
+                        ServiceStatus = ServiceStatus.Running;
+                        ServiceStatusDisplay = "Process Running (no service)";
+                    }
+                    else
+                    {
+                        ServiceStatus = ServiceStatus.NotInstalled;
+                        ServiceStatusDisplay = "Service Not Installed";
+                    }
                 }
             }
             catch
             {
+                ServiceStatus = ServiceStatus.Unknown;
                 ServiceStatusDisplay = "Unknown";
                 IsServiceRunning = false;
+            }
+            finally
+            {
+                _isRefreshingStatus = false;
+            }
+        }
+
+        [RelayCommand]
+        public async Task ToggleServiceInstallAsync()
+        {
+            if (IsOperatingService || IsBusy || IsUpgradingDatabase) return;
+            if (!CanToggleServiceInstall) return; // only allowed in the stopped state
+
+            var settings = _settingsService.CurrentSettings;
+            string mySqlPath = settings.MySql.InstallationPath;
+            string serviceName = settings.MySql.ServiceName;
+            string iniPath = settings.MySql.IniPath;
+
+            if (!IsServiceInstalled)
+            {
+                if (!ConfirmAction($"Are you sure you want to install MySQL service '{serviceName}' in Windows Services?", "Confirm Install Service"))
+                {
+                    return;
+                }
+
+                IsOperatingService = true;
+                try
+                {
+                    StatusMessage = $"Installing MySQL service '{serviceName}'...";
+                    var progress = new Progress<string>(msg => StatusMessage = msg);
+                    bool ok = await _serviceManager.InstallMySqlServiceAsync(mySqlPath, serviceName, iniPath, progress);
+                    await RefreshServiceStatusAsync();
+                    StatusMessage = ok ? $"MySQL service '{serviceName}' installed successfully." : $"Failed to install MySQL service '{serviceName}'.";
+                }
+                catch (Exception ex)
+                {
+                    ErrorMessage = $"Failed to install service: {ex.Message}";
+                }
+                finally
+                {
+                    IsOperatingService = false;
+                }
+            }
+            else
+            {
+                if (!ConfirmAction($"Are you sure you want to remove MySQL service '{serviceName}' from Windows Services?", "Confirm Remove Service"))
+                {
+                    return;
+                }
+
+                IsOperatingService = true;
+                try
+                {
+                    StatusMessage = $"Removing MySQL service '{serviceName}'...";
+                    var progress = new Progress<string>(msg => StatusMessage = msg);
+                    bool ok = await _serviceManager.RemoveMySqlServiceAsync(mySqlPath, serviceName, progress);
+                    await RefreshServiceStatusAsync();
+                    StatusMessage = ok ? $"MySQL service '{serviceName}' removed successfully." : $"Failed to remove MySQL service '{serviceName}'.";
+                }
+                catch (Exception ex)
+                {
+                    ErrorMessage = $"Failed to remove service: {ex.Message}";
+                }
+                finally
+                {
+                    IsOperatingService = false;
+                }
+            }
+        }
+
+        /// <summary>Start the current MySQL once when it is stopped, so InnoDB recovers and shuts down cleanly before files are replaced.</summary>
+        [ObservableProperty]
+        private bool _startMySqlFirstForCleanShutdown = true;
+
+        [ObservableProperty]
+        private string _loginTestMessage = string.Empty;
+
+        [ObservableProperty]
+        private bool _loginTestSucceeded;
+
+        [ObservableProperty]
+        private bool _isTestingLogin;
+
+        /// <summary>Verifies the admin login used by the pre-upgrade safe shutdown, before the update is started.</summary>
+        [RelayCommand]
+        public async Task TestLoginAsync()
+        {
+            if (IsTestingLogin) return;
+
+            IsTestingLogin = true;
+            LoginTestMessage = "Testing login...";
+            try
+            {
+                _updateService.SetShutdownCredentials(MySqlUpgradeUser, MySqlUpgradePassword);
+                var (ok, message) = await _updateService.TestShutdownLoginAsync();
+                LoginTestSucceeded = ok;
+                LoginTestMessage = message;
+            }
+            catch (Exception ex)
+            {
+                LoginTestSucceeded = false;
+                LoginTestMessage = $"Login test failed: {ex.Message}";
+            }
+            finally
+            {
+                IsTestingLogin = false;
+            }
+        }
+
+        [RelayCommand]
+        public async Task ToggleServiceRunAsync()
+        {
+            if (IsOperatingService || IsBusy || IsUpgradingDatabase) return;
+
+            var settings = _settingsService.CurrentSettings;
+            string mySqlPath = settings.MySql.InstallationPath;
+            string serviceName = settings.MySql.ServiceName;
+            string iniPath = settings.MySql.IniPath;
+
+            // Capture once so the action always matches the label the user clicked.
+            bool useService = UseServiceControl;
+
+            if (IsServiceRunning)
+            {
+                string actionTarget = useService ? $"service '{serviceName}'" : "background process";
+                if (!ConfirmAction($"Are you sure you want to stop MySQL {actionTarget}?", "Confirm Stop MySQL"))
+                {
+                    return;
+                }
+
+                IsOperatingService = true;
+                try
+                {
+                    StatusMessage = $"Stopping MySQL {actionTarget}...";
+                    var progress = new Progress<string>(msg => StatusMessage = msg);
+
+                    bool ok;
+                    if (useService)
+                    {
+                        ok = await _serviceManager.StopServiceAsync(serviceName, TimeSpan.FromSeconds(30), progress);
+                    }
+                    else
+                    {
+                        ok = await _serviceManager.StopMySqlProcessAsync(mySqlPath, progress);
+                    }
+
+                    await RefreshServiceStatusAsync();
+                    StatusMessage = ok ? "MySQL stopped successfully." : "Failed to stop MySQL.";
+                }
+                catch (Exception ex)
+                {
+                    ErrorMessage = $"Failed to stop MySQL: {ex.Message}";
+                }
+                finally
+                {
+                    IsOperatingService = false;
+                }
+            }
+            else
+            {
+                string actionTarget = useService ? $"service '{serviceName}'" : "background process";
+                if (!ConfirmAction($"Are you sure you want to start MySQL {actionTarget}?", "Confirm Start MySQL"))
+                {
+                    return;
+                }
+
+                IsOperatingService = true;
+                try
+                {
+                    StatusMessage = $"Starting MySQL {actionTarget}...";
+                    var progress = new Progress<string>(msg => StatusMessage = msg);
+
+                    bool ok;
+                    if (useService)
+                    {
+                        ok = await _serviceManager.StartServiceAsync(serviceName, TimeSpan.FromSeconds(30), progress);
+                    }
+                    else
+                    {
+                        ok = await _serviceManager.StartMySqlProcessAsync(mySqlPath, iniPath, progress);
+                    }
+
+                    await RefreshServiceStatusAsync();
+                    StatusMessage = ok ? "MySQL started successfully." : "Failed to start MySQL. Check error log (.err) for details.";
+                }
+                catch (Exception ex)
+                {
+                    ErrorMessage = $"Failed to start MySQL: {ex.Message}";
+                }
+                finally
+                {
+                    IsOperatingService = false;
+                }
             }
         }
 
         [RelayCommand]
         public async Task StartMySqlServiceAsync()
         {
-            if (IsOperatingService) return;
+            if (IsOperatingService || IsUpgradingDatabase) return;
+
+            if (IsServiceRunning) return; // already running: nothing to start
+
+            bool useService = UseServiceControl;
+            string target = useService ? "service" : "background process";
+            if (!ConfirmAction($"Are you sure you want to start the MySQL {target}?", "Confirm Start MySQL"))
+            {
+                return;
+            }
+
             IsOperatingService = true;
             try
             {
                 var settings = _settingsService.CurrentSettings;
                 string serviceName = settings.MySql.ServiceName;
-                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [SERVICE] Starting MySQL service '{serviceName}'...");
+                string mySqlPath = settings.MySql.InstallationPath;
+                string iniPath = settings.MySql.IniPath;
+                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [SERVICE] Starting MySQL {(useService ? $"service '{serviceName}'" : "process")}...");
 
                 var progress = new Progress<string>(msg =>
                 {
                     UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [SERVICE] {msg}");
                 });
 
-                bool started = await _serviceManager.StartServiceAsync(serviceName, TimeSpan.FromSeconds(30), progress);
+                bool started;
+                if (useService)
+                {
+                    started = await _serviceManager.StartServiceAsync(serviceName, TimeSpan.FromSeconds(30), progress);
+                }
+                else
+                {
+                    started = await _serviceManager.StartMySqlProcessAsync(mySqlPath, iniPath, progress);
+                }
+
                 await RefreshServiceStatusAsync();
                 UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [SERVICE] Result: {(started ? "Started successfully." : "Failed to start.")}");
             }
@@ -573,20 +916,40 @@ namespace XamppUpdate.ViewModels
         [RelayCommand]
         public async Task StopMySqlServiceAsync()
         {
-            if (IsOperatingService) return;
+            if (IsOperatingService || IsUpgradingDatabase) return;
+
+            if (!IsServiceRunning) return; // nothing running: nothing to stop
+
+            bool useService = UseServiceControl;
+            string target = useService ? "service" : "background process";
+            if (!ConfirmAction($"Are you sure you want to stop the MySQL {target}?", "Confirm Stop MySQL"))
+            {
+                return;
+            }
+
             IsOperatingService = true;
             try
             {
                 var settings = _settingsService.CurrentSettings;
                 string serviceName = settings.MySql.ServiceName;
-                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [SERVICE] Stopping MySQL service '{serviceName}'...");
+                string mySqlPath = settings.MySql.InstallationPath;
+                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [SERVICE] Stopping MySQL {(useService ? $"service '{serviceName}'" : "process")}...");
 
                 var progress = new Progress<string>(msg =>
                 {
                     UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [SERVICE] {msg}");
                 });
 
-                bool stopped = await _serviceManager.StopServiceAsync(serviceName, TimeSpan.FromSeconds(30), progress);
+                bool stopped;
+                if (useService)
+                {
+                    stopped = await _serviceManager.StopServiceAsync(serviceName, TimeSpan.FromSeconds(30), progress);
+                }
+                else
+                {
+                    stopped = await _serviceManager.StopMySqlProcessAsync(mySqlPath, progress);
+                }
+
                 await RefreshServiceStatusAsync();
                 UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [SERVICE] Result: {(stopped ? "Stopped successfully." : "Failed to stop.")}");
             }
@@ -611,17 +974,13 @@ namespace XamppUpdate.ViewModels
                 var settings = _settingsService.CurrentSettings;
                 string serviceName = settings.MySql.ServiceName;
 
-                // Stop service first if running
-                if (_serviceManager.ServiceExists(serviceName))
+                // Stop MySQL first if running, as a service and/or a standalone process
+                if (IsServiceRunning || _serviceManager.IsMySqlProcessRunning(settings.MySql.InstallationPath))
                 {
-                    var status = await _serviceManager.GetServiceStatusAsync(serviceName);
-                    if (status == ServiceControllerStatus.Running)
-                    {
-                        UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [CLEANUP] Stopping MySQL service prior to renaming log/stat files...");
-                        await _serviceManager.StopServiceAsync(serviceName, TimeSpan.FromSeconds(30));
-                        await Task.Delay(1000);
-                        await RefreshServiceStatusAsync();
-                    }
+                    UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [CLEANUP] Stopping MySQL ({(UseServiceControl ? "service" : "process")}) prior to renaming log/stat files...");
+                    await _serviceManager.StopMySqlAnyAsync(serviceName, settings.MySql.InstallationPath);
+                    await Task.Delay(1000);
+                    await RefreshServiceStatusAsync();
                 }
 
                 string mySqlDir = settings.MySql.InstallationPath;
@@ -694,6 +1053,14 @@ namespace XamppUpdate.ViewModels
         public async Task RestoreRenamedFilesAsync()
         {
             if (IsOperatingService || IsUpgradingDatabase) return;
+
+            if (!ConfirmAction(
+                "⚠️ Restoring .bak files will revert renamed backup files in the data directory back to their original names. MySQL service will be stopped if running.\n\nAre you sure you want to proceed?",
+                "Confirm Restore Backup Files"))
+            {
+                return;
+            }
+
             IsOperatingService = true;
 
             try
@@ -701,16 +1068,12 @@ namespace XamppUpdate.ViewModels
                 var settings = _settingsService.CurrentSettings;
                 string serviceName = settings.MySql.ServiceName;
 
-                if (_serviceManager.ServiceExists(serviceName))
+                if (IsServiceRunning || _serviceManager.IsMySqlProcessRunning(settings.MySql.InstallationPath))
                 {
-                    var status = await _serviceManager.GetServiceStatusAsync(serviceName);
-                    if (status == ServiceControllerStatus.Running)
-                    {
-                        UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [RESTORE] Stopping MySQL service prior to restoring files...");
-                        await _serviceManager.StopServiceAsync(serviceName, TimeSpan.FromSeconds(30));
-                        await Task.Delay(1000);
-                        await RefreshServiceStatusAsync();
-                    }
+                    UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [RESTORE] Stopping MySQL ({(UseServiceControl ? "service" : "process")}) prior to restoring files...");
+                    await _serviceManager.StopMySqlAnyAsync(serviceName, settings.MySql.InstallationPath);
+                    await Task.Delay(1000);
+                    await RefreshServiceStatusAsync();
                 }
 
                 string mySqlDir = settings.MySql.InstallationPath;
@@ -767,6 +1130,212 @@ namespace XamppUpdate.ViewModels
             finally
             {
                 IsOperatingService = false;
+            }
+        }
+
+        [RelayCommand]
+        public async Task DumpAllDatabasesAsync()
+        {
+            if (IsOperatingService || IsUpgradingDatabase) return;
+
+            var saveDialog = new SaveFileDialog
+            {
+                Title = "Select Destination for Full Database Dump (.sql)",
+                Filter = "SQL Dump Files (*.sql)|*.sql|All Files (*.*)|*.*",
+                FileName = $"all_databases_dump_{DateTime.Now:yyyyMMdd_HHmmss}.sql"
+            };
+
+            string backupFolder = _settingsService.CurrentSettings.General.ResolvedBackupDirectory;
+            if (Directory.Exists(backupFolder))
+            {
+                saveDialog.InitialDirectory = backupFolder;
+            }
+
+            if (saveDialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            string targetFile = saveDialog.FileName;
+            IsUpgradingDatabase = true;
+            UpgradeErrorMessage = string.Empty;
+            UpgradeStatusMessage = "Dumping all databases...";
+            UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [DUMP] Initializing database dump to '{targetFile}'...");
+
+            _cts = new CancellationTokenSource();
+
+            var progress = new Progress<UpdateProgressReport>(report =>
+            {
+                UpgradeStatusMessage = report.Message;
+                if (report.IsError)
+                {
+                    UpgradeErrorMessage = report.Message;
+                }
+                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] {report.Message}");
+            });
+
+            try
+            {
+                bool success = await _updateService.DumpAllDatabasesAsync(
+                    targetFile,
+                    MySqlUpgradeUser,
+                    MySqlUpgradePassword,
+                    "127.0.0.1",
+                    progress,
+                    _cts.Token);
+
+                if (success)
+                {
+                    UpgradeStatusMessage = "Database dump completed successfully.";
+                }
+                else
+                {
+                    UpgradeStatusMessage = "Database dump failed. See output log.";
+                }
+            }
+            catch (Exception ex)
+            {
+                UpgradeErrorMessage = ex.Message;
+                UpgradeStatusMessage = $"Dump failed: {ex.Message}";
+                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [DUMP EXCEPTION] {ex.Message}");
+            }
+            finally
+            {
+                IsUpgradingDatabase = false;
+                _ = RefreshServiceStatusAsync();
+            }
+        }
+
+        [RelayCommand]
+        public async Task RestoreDatabaseAsync()
+        {
+            if (IsOperatingService || IsUpgradingDatabase) return;
+
+            if (!ConfirmAction(
+                "⚠️ DANGEROUS OPERATION: Restoring a database from an SQL file will execute all statements in the file and may overwrite or modify existing databases and data.\n\nAre you sure you want to proceed with database restore?",
+                "Confirm Database Restore (Dangerous)"))
+            {
+                return;
+            }
+
+            var openDialog = new OpenFileDialog
+            {
+                Title = "Select SQL Dump File to Restore",
+                Filter = "SQL Files (*.sql)|*.sql|All Files (*.*)|*.*"
+            };
+
+            string backupFolder = _settingsService.CurrentSettings.General.ResolvedBackupDirectory;
+            if (Directory.Exists(backupFolder))
+            {
+                openDialog.InitialDirectory = backupFolder;
+            }
+
+            if (openDialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            string selectedFile = openDialog.FileName;
+            IsUpgradingDatabase = true;
+            UpgradeErrorMessage = string.Empty;
+            UpgradeStatusMessage = $"Restoring database from '{Path.GetFileName(selectedFile)}'...";
+            UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [RESTORE] Restoring database from '{selectedFile}'...");
+
+            _cts = new CancellationTokenSource();
+
+            var progress = new Progress<UpdateProgressReport>(report =>
+            {
+                UpgradeStatusMessage = report.Message;
+                if (report.IsError)
+                {
+                    UpgradeErrorMessage = report.Message;
+                }
+                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] {report.Message}");
+            });
+
+            try
+            {
+                bool success = await _updateService.RestoreDatabaseFromSqlFileAsync(
+                    selectedFile,
+                    MySqlUpgradeUser,
+                    MySqlUpgradePassword,
+                    "127.0.0.1",
+                    progress,
+                    _cts.Token);
+
+                if (success)
+                {
+                    UpgradeStatusMessage = "Database restore completed successfully.";
+                }
+                else
+                {
+                    UpgradeStatusMessage = "Database restore failed. See output log.";
+                }
+            }
+            catch (Exception ex)
+            {
+                UpgradeErrorMessage = ex.Message;
+                UpgradeStatusMessage = $"Restore failed: {ex.Message}";
+                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [RESTORE EXCEPTION] {ex.Message}");
+            }
+            finally
+            {
+                IsUpgradingDatabase = false;
+                _ = RefreshServiceStatusAsync();
+            }
+        }
+
+        [RelayCommand]
+        public async Task RunMariaDbInstallDbAsync()
+        {
+            if (IsOperatingService || IsUpgradingDatabase) return;
+
+            if (!ConfirmAction(
+                "⚠️ MAINTENANCE / DANGEROUS OPERATION: Running mariadb-install-db will initialize or recreate internal database system tables in the data folder. The MySQL service will be stopped if currently running.\n\nAre you sure you want to run mariadb-install-db?",
+                "Confirm MariaDB Install DB (Maintenance)"))
+            {
+                return;
+            }
+
+            IsUpgradingDatabase = true;
+            UpgradeErrorMessage = string.Empty;
+            UpgradeStatusMessage = "Running mariadb-install-db.exe...";
+            UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [INSTALL-DB] Starting mariadb-install-db...");
+
+            _cts = new CancellationTokenSource();
+
+            var progress = new Progress<UpdateProgressReport>(report =>
+            {
+                UpgradeStatusMessage = report.Message;
+                if (report.IsError)
+                {
+                    UpgradeErrorMessage = report.Message;
+                }
+                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] {report.Message}");
+            });
+
+            try
+            {
+                bool success = await _updateService.RunMariaDbInstallDbAsync(progress, _cts.Token);
+                if (success)
+                {
+                    UpgradeStatusMessage = "mariadb-install-db completed successfully.";
+                }
+                else
+                {
+                    UpgradeStatusMessage = "mariadb-install-db failed. See output log.";
+                }
+            }
+            catch (Exception ex)
+            {
+                UpgradeErrorMessage = ex.Message;
+                UpgradeStatusMessage = $"mariadb-install-db exception: {ex.Message}";
+                UpgradeLogs.Add($"[{DateTime.Now:HH:mm:ss}] [INSTALL-DB EXCEPTION] {ex.Message}");
+            }
+            finally
+            {
+                IsUpgradingDatabase = false;
+                _ = RefreshServiceStatusAsync();
             }
         }
 

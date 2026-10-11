@@ -7,8 +7,9 @@
         xmlns:conv="clr-namespace:XamppUpdate.Converters"
         mc:Ignorable="d"
         Title="{Binding WindowTitle}"
-        Height="700" Width="980"
+        Height="860" Width="980"
         MinHeight="580" MinWidth="840"
+        MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}"
         WindowStartupLocation="CenterScreen"
         Icon="pack://application:,,,/app.ico"
         Background="{StaticResource WindowBgBrush}">
@@ -184,7 +185,6 @@
                     <Border Background="#DCFCE7" CornerRadius="4" Padding="6,2" Margin="0,0,10,0">
                         <TextBlock Text="🛡️ Administrator Privileges Active" FontSize="11" FontWeight="SemiBold" Foreground="#15803D" />
                     </Border>
-                    <TextBlock Text="v0.1" FontSize="12" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
                 </StackPanel>
             </Grid>
         </Border>

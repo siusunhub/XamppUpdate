@@ -35,9 +35,10 @@ namespace XamppUpdate.Views.Controls
         {
             if (d is StatusBadge badge && e.NewValue is ServiceStatus status)
             {
-                if (string.IsNullOrEmpty(badge.Text) || badge.Text == "Unknown" || badge.Text == "Running" || badge.Text == "Stopped" || badge.Text == "Not Installed" || badge.Text == "Under Construction")
+                var bindingExpr = System.Windows.Data.BindingOperations.GetBindingExpression(badge, TextProperty);
+                if (bindingExpr == null)
                 {
-                    badge.Text = status switch
+                    badge.SetCurrentValue(TextProperty, status switch
                     {
                         ServiceStatus.Running => "Running",
                         ServiceStatus.Stopped => "Stopped",
@@ -46,7 +47,7 @@ namespace XamppUpdate.Views.Controls
                         ServiceStatus.Updating => "Updating...",
                         ServiceStatus.Error => "Error",
                         _ => "Unknown"
-                    };
+                    });
                 }
             }
         }

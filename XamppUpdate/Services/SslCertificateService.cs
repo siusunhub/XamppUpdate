@@ -12,6 +12,28 @@ namespace XamppUpdate.Services
 {
     public class SslCertificateService : ISslCertificateService
     {
+        private readonly ISettingsService? _settingsService;
+
+        public SslCertificateService(ISettingsService? settingsService = null)
+        {
+            _settingsService = settingsService;
+        }
+
+        private string ResolveApacheRoot(string? explicitPath = null)
+        {
+            if (!string.IsNullOrWhiteSpace(explicitPath) && Directory.Exists(explicitPath))
+                return explicitPath;
+
+            string fromSettings = _settingsService?.CurrentSettings?.Apache?.InstallationPath ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(fromSettings) && Directory.Exists(fromSettings))
+                return fromSettings;
+
+            if (Directory.Exists(@"C:\xampp\apache"))
+                return @"C:\xampp\apache";
+
+            return fromSettings;
+        }
+
         private static readonly Regex VirtualHostStartRegex = new(@"<VirtualHost\s+([^>]+)>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex VirtualHostEndRegex = new(@"</VirtualHost>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex ServerNameRegex = new(@"^\s*ServerName\s+([^\s#]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -284,6 +306,24 @@ namespace XamppUpdate.Services
                 certInfo.ValidFrom = cert.NotBefore;
                 certInfo.ValidTo = cert.NotAfter;
 
+                // Extract SAN (Subject Alternative Names)
+                try
+                {
+                    var sanExt = cert.Extensions["2.5.29.17"] as X509SubjectAlternativeNameExtension;
+                    if (sanExt != null)
+                    {
+                        certInfo.SanList = string.Join(", ", sanExt.EnumerateDnsNames());
+                    }
+                    else
+                    {
+                        certInfo.SanList = string.Empty;
+                    }
+                }
+                catch
+                {
+                    certInfo.SanList = string.Empty;
+                }
+
                 int days = (int)Math.Floor((cert.NotAfter - DateTime.Now).TotalDays);
                 certInfo.DaysRemaining = days;
 
@@ -382,6 +422,17 @@ namespace XamppUpdate.Services
             {
                 if (File.Exists(certificateFilePath))
                 {
+                    try
+                    {
+                        using var cert = LoadCertificate(certificateFilePath);
+                        if (cert != null)
+                        {
+                            X509Certificate2UI.DisplayCertificate(cert);
+                            return;
+                        }
+                    }
+                    catch { }
+
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = "rundll32.exe",
@@ -394,6 +445,151 @@ namespace XamppUpdate.Services
             {
                 Debug.WriteLine($"Failed to open certificate in viewer: {ex.Message}");
             }
+        }
+
+        public async Task<SslCertificateInfo> ResolveVHostCertificateAsync(VHostEntry entry, string? apachePath = null)
+        {
+            return await Task.Run(() =>
+            {
+                var certInfo = new SslCertificateInfo
+                {
+                    HostName = string.IsNullOrWhiteSpace(entry.ServerName) ? entry.DisplayText : entry.ServerName,
+                    Port = entry.Port.ToString(),
+                    ConfigSourceFile = "httpd-vhosts.conf"
+                };
+
+                string serverRoot = ResolveApacheRoot(apachePath);
+
+                if (entry.UseLetsEncrypt)
+                {
+                    certInfo.CertSourceType = "Let's Encrypt (mod_md Automated)";
+                    string rawDomain = !string.IsNullOrWhiteSpace(entry.ServerName) ? entry.ServerName.Trim() : entry.DisplayText.Trim();
+                    string domain = VHostService.CleanDomainName(rawDomain);
+
+                    // Candidate paths for mod_md pubcert.pem
+                    var candidatePaths = new List<string>();
+
+                    if (!string.IsNullOrWhiteSpace(serverRoot))
+                    {
+                        if (!string.IsNullOrWhiteSpace(domain))
+                        {
+                            candidatePaths.Add(Path.Combine(serverRoot, "md", "domains", domain, "pubcert.pem"));
+                            candidatePaths.Add(Path.Combine(serverRoot, "state", "md", "domains", domain, "pubcert.pem"));
+                            candidatePaths.Add(Path.Combine(serverRoot, "conf", "md", "domains", domain, "pubcert.pem"));
+                            candidatePaths.Add(Path.Combine(serverRoot, "logs", "md", "domains", domain, "pubcert.pem"));
+                        }
+
+                        // Also check aliases
+                        if (!string.IsNullOrWhiteSpace(entry.ServerAlias))
+                        {
+                            var aliases = entry.ServerAlias.Split(new[] { ' ', '\t', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            foreach (var alias in aliases)
+                            {
+                                string cleanAlias = VHostService.CleanDomainName(alias);
+                                if (!string.IsNullOrWhiteSpace(cleanAlias))
+                                {
+                                    candidatePaths.Add(Path.Combine(serverRoot, "md", "domains", cleanAlias, "pubcert.pem"));
+                                    candidatePaths.Add(Path.Combine(serverRoot, "state", "md", "domains", cleanAlias, "pubcert.pem"));
+                                }
+                            }
+                        }
+
+                        // Also scan directory md\domains in case of directory casing differences
+                        string mdDomainsDir = Path.Combine(serverRoot, "md", "domains");
+                        if (Directory.Exists(mdDomainsDir))
+                        {
+                            try
+                            {
+                                foreach (var dir in Directory.EnumerateDirectories(mdDomainsDir))
+                                {
+                                    string dirName = Path.GetFileName(dir);
+                                    if (dirName.Equals(domain, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        candidatePaths.Insert(0, Path.Combine(dir, "pubcert.pem"));
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+
+                    string? foundPubCert = candidatePaths.FirstOrDefault(File.Exists);
+                    if (foundPubCert != null)
+                    {
+                        certInfo.CertificateFilePath = foundPubCert;
+                        certInfo.CertificateFileExists = true;
+                        string dir = Path.GetDirectoryName(foundPubCert)!;
+                        string keyPath = Path.Combine(dir, "privkey.pem");
+                        certInfo.KeyFilePath = keyPath;
+                        certInfo.KeyFileExists = File.Exists(keyPath);
+
+                        InspectCertificateFile(certInfo);
+                    }
+                    else
+                    {
+                        // Expected default path
+                        string expectedCert = !string.IsNullOrWhiteSpace(serverRoot)
+                            ? Path.Combine(serverRoot, "md", "domains", domain, "pubcert.pem")
+                            : $@"C:\xampp\apache\md\domains\{domain}\pubcert.pem";
+                        string expectedKey = !string.IsNullOrWhiteSpace(serverRoot)
+                            ? Path.Combine(serverRoot, "md", "domains", domain, "privkey.pem")
+                            : $@"C:\xampp\apache\md\domains\{domain}\privkey.pem";
+
+                        certInfo.CertificateFilePath = expectedCert;
+                        certInfo.KeyFilePath = expectedKey;
+                        certInfo.CertificateFileExists = false;
+                        certInfo.KeyFileExists = false;
+                        certInfo.Status = SslCertificateStatus.PendingIssuance;
+                        string fallback = string.IsNullOrWhiteSpace(entry.SslCertificateFile) ? "conf/ssl.crt/server.crt" : entry.SslCertificateFile.Trim();
+                        certInfo.ErrorMessage = "Certificate has not been issued yet by mod_md. Until it is, Apache serves the fallback certificate (" + fallback + "). Apache will automatically request and install the Let's Encrypt certificate when Apache is started and domain points to this server.";
+                    }
+                }
+                else
+                {
+                    certInfo.CertSourceType = "Custom Config (SSLCertificateFile)";
+
+                    string certPath = entry.SslCertificateFile?.Trim() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(certPath) && !certPath.StartsWith('#'))
+                    {
+                        string resolvedCert = ResolvePath(certPath, serverRoot);
+                        string resolvedKey = (!string.IsNullOrWhiteSpace(entry.SslCertificateKeyFile) && !entry.SslCertificateKeyFile.Trim().StartsWith('#'))
+                            ? ResolvePath(entry.SslCertificateKeyFile.Trim(), serverRoot)
+                            : string.Empty;
+                        string resolvedChain = (!string.IsNullOrWhiteSpace(entry.SslCertificateChainFile) && !entry.SslCertificateChainFile.Trim().StartsWith('#'))
+                            ? ResolvePath(entry.SslCertificateChainFile.Trim(), serverRoot)
+                            : string.Empty;
+
+                        certInfo.CertificateFilePath = resolvedCert;
+                        certInfo.KeyFilePath = resolvedKey;
+                        certInfo.ChainFilePath = resolvedChain;
+
+                        InspectCertificateFile(certInfo);
+                    }
+                    else
+                    {
+                        // Check if Apache default certificate exists
+                        string defaultCertPath = Path.Combine(serverRoot, "conf", "ssl.crt", "server.crt");
+                        string defaultKeyPath = Path.Combine(serverRoot, "conf", "ssl.key", "server.key");
+
+                        if (File.Exists(defaultCertPath))
+                        {
+                            certInfo.CertSourceType = "Apache Default SSL Certificate (Inherited)";
+                            certInfo.CertificateFilePath = defaultCertPath;
+                            certInfo.KeyFilePath = defaultKeyPath;
+                            InspectCertificateFile(certInfo);
+                        }
+                        else
+                        {
+                            certInfo.CertificateFilePath = "(No SSLCertificateFile specified)";
+                            certInfo.CertificateFileExists = false;
+                            certInfo.Status = SslCertificateStatus.FileNotFound;
+                            certInfo.ErrorMessage = "No SSLCertificateFile path configured for this VirtualHost.";
+                        }
+                    }
+                }
+
+                return certInfo;
+            });
         }
 
         public async Task<bool> UpdateCertificateAsync(

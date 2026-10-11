@@ -19,6 +19,7 @@ namespace XamppUpdate
         private IMySqlUpdateService? _mySqlUpdateService;
         private IPhpMyAdminUpdateService? _phpMyAdminUpdateService;
         private ISslCertificateService? _sslCertificateService;
+        private IVHostService? _vhostService;
         private IComposerService? _composerService;
 
         protected override void OnStartup(StartupEventArgs e)
@@ -53,7 +54,8 @@ namespace XamppUpdate
             _versionDetectionService = new VersionDetectionService();
             _archiveService = new ArchiveService();
             _configDiffService = new ConfigDiffService();
-            _sslCertificateService = new SslCertificateService();
+            _sslCertificateService = new SslCertificateService(_settingsService);
+            _vhostService = new VHostService(_settingsService);
             _composerService = new ComposerService(_settingsService);
             _apacheUpdateService = new ApacheUpdateService(
                 _settingsService,
@@ -89,7 +91,7 @@ namespace XamppUpdate
             var mainWindow = new MainWindow(
                 mainViewModel,
                 () => new SettingsViewModel(_settingsService),
-                () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService, _sslCertificateService),
+                () => new ApacheWizardViewModel(_apacheUpdateService, _settingsService, _versionDetectionService, _sslCertificateService, _vhostService, _serviceManager),
                 () => new PhpWizardViewModel(_phpUpdateService, _settingsService, _versionDetectionService),
                 () => new MySqlWizardViewModel(_mySqlUpdateService, _settingsService, _versionDetectionService, _serviceManager),
                 () => new PhpMyAdminWizardViewModel(_phpMyAdminUpdateService, _settingsService, _versionDetectionService),

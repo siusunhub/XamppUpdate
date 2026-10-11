@@ -11,6 +11,7 @@ namespace XamppUpdate.Views
             Title = $"Apache Update Wizard - {AppInfo.AppName} v{AppInfo.Version}";
             DataContext = viewModel;
             viewModel.RequestClose += () => Close();
+            Closed += (_, _) => viewModel.StopStatusMonitor();
             viewModel.RequestOpenGenerateDefaultCert += () =>
             {
                 var certVm = new GenerateDefaultSslCertViewModel(viewModel.SslCertificateService, viewModel.SettingsService);
@@ -19,6 +20,15 @@ namespace XamppUpdate.Views
                     Owner = this
                 };
                 certWindow.ShowDialog();
+            };
+            viewModel.RequestOpenVHostManager += () =>
+            {
+                var vhostVm = new VHostManagerViewModel(viewModel.VHostService, viewModel.SettingsService, viewModel.SslCertificateService);
+                var vhostWindow = new VHostManagerWindow(vhostVm)
+                {
+                    Owner = this
+                };
+                vhostWindow.ShowDialog();
             };
         }
     }

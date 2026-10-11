@@ -276,6 +276,18 @@ namespace XamppUpdate.Services
 
             bool serviceExists = _serviceManager.ServiceExists(serviceName);
 
+            // Remember how Apache was running so the same mode can be restored afterwards.
+            // httpd.exe processes spawned by the service also match IsApacheProcessRunning, so only
+            // treat it as a standalone process when the service itself is not running.
+            bool serviceWasRunning = false;
+            if (serviceExists)
+            {
+                var preStatus = await _serviceManager.GetServiceStatusAsync(serviceName);
+                serviceWasRunning = preStatus == System.ServiceProcess.ServiceControllerStatus.Running ||
+                                    preStatus == System.ServiceProcess.ServiceControllerStatus.StartPending;
+            }
+            bool standaloneWasRunning = !serviceWasRunning && _serviceManager.IsApacheProcessRunning(localApacheRoot);
+
             // Step 2: Stop Service (Real in both modes if installed)
             if (serviceExists)
             {
@@ -328,9 +340,45 @@ namespace XamppUpdate.Services
                 {
                     Step = UpdateStep.ServiceStop,
                     StepTitle = $"{modeTag}Service Check",
-                    Message = $"{modeTag}Service '{serviceName}' is not installed as a Windows Service. Skipping stop.",
+                    Message = $"{modeTag}Service '{serviceName}' is not installed as a Windows Service. Skipping service stop.",
                     Percentage = 40
                 });
+            }
+
+            // Step 2b: A standalone httpd.exe (no service, or service stopped) still locks binaries/modules.
+            if (_serviceManager.IsApacheProcessRunning(localApacheRoot))
+            {
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.ServiceStop,
+                    StepTitle = $"{modeTag}Stopping Apache Process",
+                    Message = $"{modeTag}Apache is running as a process. Stopping httpd...",
+                    Percentage = 42
+                });
+
+                var processStopProgress = new Progress<string>(msg =>
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStop,
+                        StepTitle = $"{modeTag}Stopping Apache Process",
+                        Message = $"{modeTag}{msg}",
+                        Percentage = 44
+                    });
+                });
+
+                bool processStopped = await _serviceManager.StopApacheProcessAsync(localApacheRoot, processStopProgress);
+                if (!processStopped)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.Failed,
+                        StepTitle = "Process Stop Failed",
+                        Message = "Could not stop the running Apache (httpd.exe) process. Aborting to avoid corruption.",
+                        IsError = true
+                    });
+                    return false;
+                }
             }
 
             try
@@ -413,8 +461,8 @@ namespace XamppUpdate.Services
                     }
                 }
 
-                // Step 5: Start Service (Real in both modes if installed)
-                if (serviceExists)
+                // Step 5: Start Service, or restart the standalone process if that is how it was running
+                if (serviceExists && !standaloneWasRunning)
                 {
                     progress?.Report(new UpdateProgressReport
                     {
@@ -459,13 +507,47 @@ namespace XamppUpdate.Services
                         });
                     }
                 }
+                else if (standaloneWasRunning)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStart,
+                        StepTitle = $"{modeTag}Starting Apache Process",
+                        Message = $"{modeTag}Apache was running as a process. Starting httpd...",
+                        Percentage = 88
+                    });
+
+                    var processStartProgress = new Progress<string>(msg =>
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.ServiceStart,
+                            StepTitle = $"{modeTag}Starting Apache Process",
+                            Message = $"{modeTag}{msg}",
+                            Percentage = 90
+                        });
+                    });
+
+                    bool processStarted = await _serviceManager.StartApacheProcessAsync(localApacheRoot, processStartProgress);
+                    if (!processStarted)
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Failed,
+                            StepTitle = "Process Start Failed",
+                            Message = $"Apache process failed to start. Backup is available at {backupZipPath}.",
+                            IsError = true
+                        });
+                        return false;
+                    }
+                }
                 else
                 {
                     progress?.Report(new UpdateProgressReport
                     {
                         Step = UpdateStep.ServiceStart,
                         StepTitle = $"{modeTag}Service Check",
-                        Message = $"{modeTag}Service '{serviceName}' is not installed as a Windows Service. Skipping start.",
+                        Message = $"{modeTag}Service '{serviceName}' is not installed and Apache was not running. Skipping start.",
                         Percentage = 90
                     });
                 }

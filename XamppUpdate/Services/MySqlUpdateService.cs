@@ -15,6 +15,55 @@ namespace XamppUpdate.Services
     {
         private readonly ISettingsService _settingsService;
         private readonly IWindowsServiceManager _serviceManager;
+
+        // Credentials for the pre-upgrade safe shutdown (SET GLOBAL innodb_fast_shutdown=0 / mysqladmin shutdown).
+        private string _shutdownUser = "root";
+        private string _shutdownPassword = string.Empty;
+
+        public bool StartForCleanShutdown { get; set; } = true;
+
+        public void SetShutdownCredentials(string user, string password)
+        {
+            _shutdownUser = string.IsNullOrWhiteSpace(user) ? "root" : user.Trim();
+            _shutdownPassword = password ?? string.Empty;
+        }
+
+        /// <summary>Returns the most relevant startup failure line from the newest error log (or empty).</summary>
+        private static string ReadStartupErrorHint(string dataDir)
+        {
+            try
+            {
+                var logFile = new DirectoryInfo(dataDir)
+                    .EnumerateFiles("*.err")
+                    .Concat(new DirectoryInfo(dataDir).EnumerateFiles("mysql_error.log"))
+                    .OrderByDescending(f => f.LastWriteTimeUtc)
+                    .FirstOrDefault();
+                if (logFile == null) return string.Empty;
+
+                string[] lines;
+                using (var fs = new FileStream(logFile.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var sr = new StreamReader(fs))
+                {
+                    lines = sr.ReadToEnd().Split('\n');
+                }
+
+                var tail = lines.Skip(Math.Max(0, lines.Length - 60)).Select(l => l.Trim()).ToList();
+                return tail.LastOrDefault(l => l.Contains("Upgrade after a crash", StringComparison.OrdinalIgnoreCase))
+                       ?? tail.LastOrDefault(l => l.Contains("[ERROR]", StringComparison.OrdinalIgnoreCase))
+                       ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        public async Task<(bool Success, string Message)> TestShutdownLoginAsync()
+        {
+            var settings = _settingsService.CurrentSettings;
+            return await _serviceManager.TestMySqlLoginAsync(
+                settings.MySql.InstallationPath, _shutdownUser, _shutdownPassword, DetectMySqlPort());
+        }
         private readonly IVersionDetectionService _versionDetectionService;
         private readonly IArchiveService _archiveService;
         private readonly IConfigDiffService _configDiffService;
@@ -305,8 +354,180 @@ namespace XamppUpdate.Services
                     });
                 });
 
-                // 1a. Stop Apache service first (prevents MySQL connection errors during upgrade)
-                if (_serviceManager.ServiceExists(apacheServiceName))
+                // Remember HOW each server was running so the same mode can be restored in Step 7.
+                // Service-spawned processes also match the process check, so a process only counts as
+                // "standalone" when the service itself is not running.
+                string apacheDir = settings.Apache.InstallationPath;
+                string mySqlIniPath = settings.MySql.IniPath;
+
+                bool apacheServiceExists = _serviceManager.ServiceExists(apacheServiceName);
+                bool apacheSvcRunning = apacheServiceExists &&
+                    await _serviceManager.GetServiceStatusAsync(apacheServiceName) == ServiceControllerStatus.Running;
+                bool apacheStandaloneWasRunning = !apacheSvcRunning && _serviceManager.IsApacheProcessRunning(apacheDir);
+
+                bool mySqlServiceExists = _serviceManager.ServiceExists(mySqlServiceName);
+                bool mySqlSvcRunning = mySqlServiceExists &&
+                    await _serviceManager.GetServiceStatusAsync(mySqlServiceName) == ServiceControllerStatus.Running;
+                bool mySqlStandaloneWasRunning = !mySqlSvcRunning && _serviceManager.IsMySqlProcessRunning(localMySqlDir);
+
+                // 1-pre. Credentials preflight: check the login BEFORE taking anything down.
+                // A standalone process can only be shut down cleanly with a working login, so abort now (nothing touched yet).
+                // With a running service the SCM can stop it without a login, so a failed login is only a warning there
+                // (innodb_fast_shutdown=0 will be skipped, the shutdown itself is still clean).
+                if (_serviceManager.IsMySqlProcessRunning(localMySqlDir))
+                {
+                    var (loginOk, loginMessage) = await _serviceManager.TestMySqlLoginAsync(
+                        localMySqlDir, _shutdownUser, _shutdownPassword, DetectMySqlPort());
+
+                    if (!loginOk && mySqlStandaloneWasRunning)
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Failed,
+                            StepTitle = "Database Login Required",
+                            Message = $"[ERROR] {loginMessage} MySQL is running as a standalone process, which can only be shut down " +
+                                      "cleanly with a working admin login. Enter the root user/password on this step and click 'Test Login'. " +
+                                      "No files or services were changed.",
+                            Percentage = 100,
+                            IsError = true
+                        });
+                        return false;
+                    }
+
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStop,
+                        StepTitle = "Database Login Check",
+                        Message = loginOk
+                            ? $"{modeTag}{loginMessage}"
+                            : $"[WARNING] {loginMessage} Continuing: the service will be stopped gracefully without a login " +
+                              "(innodb_fast_shutdown=0 is skipped).",
+                        Percentage = 4
+                    });
+                }
+
+                // Phase-tagged progress: a leading "[TITLE]" in a message becomes the log step title, so each
+                // command (start / login / flush / stop / verify) appears as its own labelled section.
+                IProgress<string> PhaseProgress(int percentage) => new Progress<string>(msg =>
+                {
+                    string title = "Safe MySQL Shutdown";
+                    string text = msg;
+                    if (msg.StartsWith('['))
+                    {
+                        int end = msg.IndexOf(']');
+                        if (end > 1)
+                        {
+                            title = msg.Substring(1, end - 1);
+                            text = msg.Substring(end + 1).TrimStart();
+                        }
+                    }
+
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStop,
+                        StepTitle = $"{modeTag}{title}",
+                        Message = text,
+                        Percentage = percentage,
+                        IsIndeterminate = true
+                    });
+                });
+
+                // 1-start. MySQL is STOPPED. Its data folder may still hold a dirty redo log from an earlier unclean stop,
+                // which the new version cannot replay ("Upgrade after a crash is not supported"). Start the CURRENT
+                // (old) binaries once so InnoDB finishes its own recovery, then the safe shutdown below makes it clean.
+                string dataDirForRecovery = Path.Combine(localMySqlDir, "data");
+                if (StartForCleanShutdown &&
+                    !_serviceManager.IsMySqlProcessRunning(localMySqlDir) &&
+                    Directory.Exists(dataDirForRecovery))
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStop,
+                        StepTitle = $"{modeTag}Starting MySQL For Clean Shutdown",
+                        Message = $"{modeTag}MySQL is stopped. Starting the current version once so InnoDB can finish recovery and shut down cleanly...",
+                        Percentage = 3,
+                        IsIndeterminate = true
+                    });
+
+                    var startLog = PhaseProgress(3);
+                    startLog.Report($"[START 1/2 START] Running: start MySQL as {(mySqlServiceExists ? $"Windows service '{mySqlServiceName}'" : "standalone process")} using the currently installed binaries");
+                    await _serviceManager.EnsureMySqlRunningAsync(
+                        mySqlServiceName, localMySqlDir, mySqlIniPath,
+                        new Progress<string>(m => startLog.Report($"[START 1/2 START] {m}")));
+
+                    bool startedOk = _serviceManager.IsMySqlProcessRunning(localMySqlDir);
+                    startLog.Report(startedOk
+                        ? "[START 1/2 START] OK: MySQL process is running."
+                        : "[START 1/2 START] FAILED: MySQL exited right after launch (see the error log).");
+
+                    if (!startedOk)
+                    {
+                        string logHint = ReadStartupErrorHint(dataDirForRecovery);
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Failed,
+                            StepTitle = "MySQL Did Not Start",
+                            Message = "[ERROR] The currently installed MySQL could not start on its data folder, so it cannot be shut down cleanly. " +
+                                      (string.IsNullOrEmpty(logHint) ? string.Empty : $"Server log: {logHint} ") +
+                                      "If the data was last used by an OLDER MariaDB (e.g. 10.4), run that version once on this data folder " +
+                                      "and shut it down cleanly (binaries are in your mysql_backup_*.zip / mysql_old), then retry. " +
+                                      "No files were replaced.",
+                            Percentage = 100,
+                            IsError = true
+                        });
+                        return false;
+                    }
+
+                    // Crash recovery can take a while: wait until the server accepts the admin login.
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStop,
+                        StepTitle = $"{modeTag}Waiting For MySQL Recovery",
+                        Message = $"{modeTag}Waiting for MySQL to finish recovery and accept connections...",
+                        Percentage = 4,
+                        IsIndeterminate = true
+                    });
+
+                    bool recovered = false;
+                    string recoveryMessage = string.Empty;
+                    var recoveryStart = DateTime.UtcNow;
+                    while (DateTime.UtcNow - recoveryStart < TimeSpan.FromSeconds(180) &&
+                           _serviceManager.IsMySqlProcessRunning(localMySqlDir))
+                    {
+                        var (ok, msg) = await _serviceManager.TestMySqlLoginAsync(
+                            localMySqlDir, _shutdownUser, _shutdownPassword, DetectMySqlPort());
+                        recoveryMessage = msg;
+                        if (ok)
+                        {
+                            recovered = true;
+                            startLog.Report("[START 2/2 READY] OK: server finished recovery and accepted the admin login.");
+                            break;
+                        }
+
+                        // A refused login (wrong password) will not fix itself; only keep waiting on connection errors.
+                        if (msg.Contains("Access denied", StringComparison.OrdinalIgnoreCase)) break;
+                        await Task.Delay(2000, cancellationToken);
+                    }
+
+                    if (!recovered)
+                    {
+                        // We started it, so state clearly what is left running.
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Failed,
+                            StepTitle = "Database Login Required",
+                            Message = $"[ERROR] {recoveryMessage} MySQL was started to complete recovery and is still running. " +
+                                      "Enter the correct admin user/password on this step, click 'Test Login', and run the update again; " +
+                                      "it will then be shut down cleanly. No files were replaced.",
+                            Percentage = 100,
+                            IsError = true
+                        });
+                        return false;
+                    }
+                }
+
+                // 1a. Stop Apache first (prevents MySQL connection errors during upgrade) - service and/or standalone httpd
+                if (apacheServiceExists || apacheStandaloneWasRunning)
                 {
                     progress?.Report(new UpdateProgressReport
                     {
@@ -316,32 +537,46 @@ namespace XamppUpdate.Services
                         Percentage = 10,
                         IsIndeterminate = true
                     });
-                    await _serviceManager.StopServiceAsync(apacheServiceName, TimeSpan.FromSeconds(30), progressAdapter);
+                    await _serviceManager.StopApacheAnyAsync(apacheServiceName, apacheDir, progressAdapter);
                 }
 
-                // 1b. Stop MySQL service
-                if (_serviceManager.ServiceExists(mySqlServiceName))
+                // 1b. UPGRADE-SAFE MySQL shutdown (service and/or standalone process).
+                // Sets innodb_fast_shutdown=0 (full flush) then stops gracefully and WAITS - it never kills.
+                // A hard kill leaves the InnoDB redo log dirty, and MariaDB 10.5+ refuses to start on it:
+                // "Upgrade after a crash is not supported. The redo log was created with MariaDB 10.4.x".
+                if (_serviceManager.ServiceExists(mySqlServiceName) || _serviceManager.IsMySqlProcessRunning(localMySqlDir))
                 {
                     progress?.Report(new UpdateProgressReport
                     {
                         Step = UpdateStep.ServiceStop,
-                        StepTitle = $"{modeTag}Stopping MySQL Service",
-                        Message = $"{modeTag}Stopping MySQL service '{mySqlServiceName}'...",
+                        StepTitle = $"{modeTag}Safe MySQL Shutdown",
+                        Message = $"{modeTag}Flushing InnoDB and shutting MySQL down cleanly before replacing any files...",
                         Percentage = 15,
                         IsIndeterminate = true
                     });
-                    bool stopped = await _serviceManager.StopServiceAsync(mySqlServiceName, TimeSpan.FromSeconds(30), progressAdapter);
-                    if (!stopped)
+
+                    bool cleanStop = await _serviceManager.SafeShutdownMySqlAsync(
+                        mySqlServiceName, localMySqlDir, _shutdownUser, _shutdownPassword, DetectMySqlPort(), PhaseProgress(16));
+
+                    if (!cleanStop)
                     {
+                        // Do NOT fall back to killing the process: the next version could not recover that log.
                         progress?.Report(new UpdateProgressReport
                         {
-                            Step = UpdateStep.ServiceStop,
-                            StepTitle = $"{modeTag}Stopping MySQL Service",
-                            Message = $"[WARNING] Could not verify stop for service '{mySqlServiceName}'. Proceeding with caution.",
-                            Percentage = 18
+                            Step = UpdateStep.Failed,
+                            StepTitle = "Safe Shutdown Failed",
+                            Message = "[ERROR] The safe shutdown did not complete: see the 'SHUTDOWN 1/4 ... 4/4' log lines above " +
+                                      "for the command that failed. No files were changed. Fix that command (e.g. admin login) or stop MySQL " +
+                                      "manually ('mysqladmin -u root -p shutdown'), then run the update again.",
+                            Percentage = 100,
+                            IsError = true
                         });
+                        return false;
                     }
                 }
+
+                // 1c. Release file locks from any other database process (normally none are left after 1b)
+                await EnsureNoLingeringDatabaseProcessesAsync(localMySqlDir, progress, cancellationToken);
 
                 if (isTestMode)
                 {
@@ -473,6 +708,12 @@ namespace XamppUpdate.Services
                 // ==========================================
                 // STEP 3: Rename MySQL folder (mysql_old, mysql_old1, ...)
                 // ==========================================
+                // Ensure no background mysqld.exe / mariadbd.exe processes or open handles before renaming
+                if (!isTestMode)
+                {
+                    await EnsureNoLingeringDatabaseProcessesAsync(localMySqlDir, progress, cancellationToken);
+                }
+
                 string targetRenamePath = GetAvailableOldDirectoryPath(localMySqlDir);
                 string targetRenameName = Path.GetFileName(targetRenamePath);
 
@@ -498,7 +739,65 @@ namespace XamppUpdate.Services
                             Percentage = 40
                         });
 
-                        Directory.Move(localMySqlDir, targetRenamePath);
+                        // Retry policy: exponential backoff (1s, 2s, 4s, 8s, 15s cap...) with +/-20% jitter.
+                        // Antivirus scanners / Explorer / search indexer handles often release after 10-60s,
+                        // so a longer total window (~1.5 min) is far more forgiving than a short linear retry.
+                        const int maxRetries = 8;
+                        const int baseDelayMs = 1000;
+                        const int maxDelayMs = 15000;
+
+                        bool moved = false;
+                        Exception? lastException = null;
+
+                        for (int attempt = 1; attempt <= maxRetries; attempt++)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                            try
+                            {
+                                Directory.Move(localMySqlDir, targetRenamePath);
+                                moved = true;
+                                break;
+                            }
+                            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
+                            {
+                                lastException = ex;
+
+                                // A previous partial attempt may have already moved the folder.
+                                if (!Directory.Exists(localMySqlDir) && Directory.Exists(targetRenamePath))
+                                {
+                                    moved = true;
+                                    break;
+                                }
+
+                                if (attempt < maxRetries)
+                                {
+                                    int delayMs = (int)Math.Min(maxDelayMs, baseDelayMs * Math.Pow(2, attempt - 1));
+                                    delayMs = (int)(delayMs * (0.8 + Random.Shared.NextDouble() * 0.4));
+
+                                    progress?.Report(new UpdateProgressReport
+                                    {
+                                        Step = UpdateStep.FileReplacement,
+                                        StepTitle = "Retrying Folder Move",
+                                        Message = $"[RETRY {attempt}/{maxRetries}] Folder '{localMySqlDir}' is locked ({ex.Message}). Detecting lingering processes & retrying in {delayMs / 1000.0:0.0}s...",
+                                        Percentage = 40
+                                    });
+
+                                    await EnsureNoLingeringDatabaseProcessesAsync(localMySqlDir, progress, cancellationToken);
+                                    await Task.Delay(delayMs, cancellationToken);
+                                }
+                            }
+                        }
+
+                        if (!moved && lastException != null)
+                        {
+                            throw new InvalidOperationException(
+                                $"Failed to move '{localMySqlDir}' to '{targetRenameName}' after {maxRetries} attempts. " +
+                                $"Access was denied ({lastException.Message}). " +
+                                $"Nothing was changed - your original MySQL folder is intact, so it is safe to click Retry. " +
+                                $"Please ensure mysqld.exe / mariadbd.exe is stopped and no command prompts or Explorer windows are open inside '{localMySqlDir}'.",
+                                lastException);
+                        }
 
                         progress?.Report(new UpdateProgressReport
                         {
@@ -689,7 +988,7 @@ namespace XamppUpdate.Services
                                 {
                                     Step = UpdateStep.FileReplacement,
                                     StepTitle = "Data Migration Complete",
-                                    Message = $"[DATA] Atomically preserved database data directory '{destDataDir}' (100% InnoDB consistency preserved).",
+                                    Message = $"[DATA] Preserved database data directory '{destDataDir}'. Files were kept as-is; InnoDB consistency depends on MySQL having been shut down cleanly beforehand.",
                                     Percentage = 90
                                 });
                             }
@@ -791,8 +1090,8 @@ namespace XamppUpdate.Services
                     Percentage = 92
                 });
 
-                // 7a. Start MySQL service first
-                if (_serviceManager.ServiceExists(mySqlServiceName))
+                // 7a. Start MySQL first, in the mode it was running in (service, or standalone process)
+                if (mySqlServiceExists && !mySqlStandaloneWasRunning)
                 {
                     progress?.Report(new UpdateProgressReport
                     {
@@ -815,8 +1114,31 @@ namespace XamppUpdate.Services
                     }
                 }
 
-                // 7b. Start Apache service
-                if (_serviceManager.ServiceExists(apacheServiceName))
+                else if (mySqlStandaloneWasRunning)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStart,
+                        StepTitle = $"{modeTag}Starting MySQL Process",
+                        Message = $"{modeTag}MySQL was running as a process. Starting it again...",
+                        Percentage = 93,
+                        IsIndeterminate = true
+                    });
+                    bool mysqlProcStarted = await _serviceManager.StartMySqlProcessAsync(localMySqlDir, mySqlIniPath, progressAdapter);
+                    if (!mysqlProcStarted)
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.ServiceStart,
+                            StepTitle = $"{modeTag}Starting MySQL Process",
+                            Message = "[WARNING] MySQL process did not start. Check the MySQL error log (.err) for details.",
+                            Percentage = 95
+                        });
+                    }
+                }
+
+                // 7b. Start Apache in the mode it was running in (service, or standalone process)
+                if (apacheServiceExists && !apacheStandaloneWasRunning)
                 {
                     progress?.Report(new UpdateProgressReport
                     {
@@ -834,6 +1156,29 @@ namespace XamppUpdate.Services
                             Step = UpdateStep.ServiceStart,
                             StepTitle = $"{modeTag}Starting Apache Service",
                             Message = $"[WARNING] Apache service '{apacheServiceName}' did not report running status within timeout.",
+                            Percentage = 98
+                        });
+                    }
+                }
+
+                else if (apacheStandaloneWasRunning)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ServiceStart,
+                        StepTitle = $"{modeTag}Starting Apache Process",
+                        Message = $"{modeTag}Apache was running as a process. Starting httpd again...",
+                        Percentage = 96,
+                        IsIndeterminate = true
+                    });
+                    bool apacheProcStarted = await _serviceManager.StartApacheProcessAsync(apacheDir, progressAdapter);
+                    if (!apacheProcStarted)
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.ServiceStart,
+                            StepTitle = $"{modeTag}Starting Apache Process",
+                            Message = "[WARNING] Apache process did not start. Check configuration or port conflicts.",
                             Percentage = 98
                         });
                     }
@@ -928,6 +1273,102 @@ namespace XamppUpdate.Services
             }
         }
 
+        private static async Task EnsureNoLingeringDatabaseProcessesAsync(
+            string localMySqlDir,
+            IProgress<UpdateProgressReport>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            var targetNames = new[] { "mysqld", "mariadbd", "mysqld-nt" };
+            string normalizedLocalDir = Path.GetFullPath(localMySqlDir).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+
+            foreach (var name in targetNames)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                Process[] procs;
+                try
+                {
+                    procs = Process.GetProcessesByName(name);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var proc in procs)
+                {
+                    using (proc)
+                    {
+                        bool isOurProcess = false;
+                        string procPath = string.Empty;
+
+                        try
+                        {
+                            procPath = proc.MainModule?.FileName ?? string.Empty;
+                            isOurProcess = XamppUpdate.Services.Uat.PathSafety.IsProcessUnderRoot(procPath, localMySqlDir);
+                        }
+                        catch
+                        {
+                            // Image path unreadable: ownership cannot be proven, so this process is left alone.
+                            isOurProcess = false;
+                        }
+
+                        if (isOurProcess)
+                        {
+                            progress?.Report(new UpdateProgressReport
+                            {
+                                Step = UpdateStep.ServiceStop,
+                                StepTitle = "Stopping Database Process",
+                                Message = $"[PROCESS DETECTED] Active database engine '{name}.exe' (PID: {proc.Id}) detected in '{localMySqlDir}'. Closing process to release file locks...",
+                                Percentage = 16,
+                                IsIndeterminate = true
+                            });
+
+                            try
+                            {
+                                if (!proc.HasExited)
+                                {
+                                    proc.CloseMainWindow();
+                                    await Task.Delay(1000, cancellationToken);
+                                }
+
+                                if (!proc.HasExited)
+                                {
+                                    proc.Kill(true);
+                                    await Task.Run(() => proc.WaitForExit(5000), cancellationToken);
+                                }
+
+                                progress?.Report(new UpdateProgressReport
+                                {
+                                    Step = UpdateStep.ServiceStop,
+                                    StepTitle = "Process Stopped",
+                                    Message = $"[PROCESS TERMINATED] Database engine '{name}.exe' (PID: {proc.Id}) has exited.",
+                                    Percentage = 18,
+                                    IsIndeterminate = false
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                progress?.Report(new UpdateProgressReport
+                                {
+                                    Step = UpdateStep.ServiceStop,
+                                    StepTitle = "Process Warning",
+                                    Message = $"[PROCESS WARN] Could not terminate '{name}.exe' (PID: {proc.Id}): {ex.Message}",
+                                    Percentage = 18,
+                                    IsIndeterminate = false
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Force GC and brief settle delay to allow Windows kernel and filesystem drivers to release handles
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            await Task.Delay(800, cancellationToken);
+        }
+
         public string DetectMySqlUpgradeToolPath()
         {
             var settings = _settingsService.CurrentSettings;
@@ -990,16 +1431,15 @@ namespace XamppUpdate.Services
             // Ensure MySQL service is running so upgrade tool can connect to database
             var settings = _settingsService.CurrentSettings;
             string mySqlServiceName = settings.MySql.ServiceName;
-            if (_serviceManager.ServiceExists(mySqlServiceName))
+            // Works for both modes: service if installed, standalone process otherwise (never a second instance).
             {
-                var serviceStatus = await _serviceManager.GetServiceStatusAsync(mySqlServiceName);
-                if (serviceStatus != ServiceControllerStatus.Running)
+                if (!_serviceManager.IsMySqlProcessRunning(settings.MySql.InstallationPath))
                 {
                     progress?.Report(new UpdateProgressReport
                     {
                         Step = UpdateStep.ConfigApplication,
-                        StepTitle = "Starting MySQL Service",
-                        Message = $"[SERVICE] MySQL service '{mySqlServiceName}' is {serviceStatus}. Starting service for upgrade connection...",
+                        StepTitle = "Starting MySQL",
+                        Message = "[SERVICE] MySQL is not running. Starting it for the upgrade connection...",
                         Percentage = 15,
                         IsIndeterminate = true
                     });
@@ -1016,7 +1456,7 @@ namespace XamppUpdate.Services
                         });
                     });
 
-                    await _serviceManager.StartServiceAsync(mySqlServiceName, TimeSpan.FromSeconds(30), serviceProgress);
+                    await _serviceManager.EnsureMySqlRunningAsync(mySqlServiceName, settings.MySql.InstallationPath, settings.MySql.IniPath, serviceProgress);
                 }
             }
 
@@ -1221,6 +1661,642 @@ namespace XamppUpdate.Services
                         Message = $"[ERROR] Exception executing mysql_upgrade: {ex.Message}",
                         Percentage = 100,
                         IsError = true
+                    });
+                    return false;
+                }
+            }, cancellationToken);
+        }
+
+        public string? DetectDumpToolPath()
+        {
+            var settings = _settingsService.CurrentSettings;
+            string localMySqlDir = settings.MySql.InstallationPath;
+            var candidates = new[]
+            {
+                Path.Combine(localMySqlDir, "bin", "mariadb-dump.exe"),
+                Path.Combine(localMySqlDir, "bin", "mysqldump.exe")
+            };
+            return candidates.FirstOrDefault(File.Exists);
+        }
+
+        public string? DetectMySqlClientToolPath()
+        {
+            var settings = _settingsService.CurrentSettings;
+            string localMySqlDir = settings.MySql.InstallationPath;
+            var candidates = new[]
+            {
+                Path.Combine(localMySqlDir, "bin", "mariadb.exe"),
+                Path.Combine(localMySqlDir, "bin", "mysql.exe")
+            };
+            return candidates.FirstOrDefault(File.Exists);
+        }
+
+        public string? DetectInstallDbToolPath()
+        {
+            var settings = _settingsService.CurrentSettings;
+            string localMySqlDir = settings.MySql.InstallationPath;
+            var candidates = new[]
+            {
+                Path.Combine(localMySqlDir, "bin", "mariadb-install-db.exe"),
+                Path.Combine(localMySqlDir, "bin", "mysql_install_db.exe")
+            };
+            return candidates.FirstOrDefault(File.Exists);
+        }
+
+        private int DetectMySqlPort()
+        {
+            try
+            {
+                var settings = _settingsService.CurrentSettings;
+                string iniPath = settings.MySql.IniPath;
+                if (!File.Exists(iniPath))
+                {
+                    iniPath = Path.Combine(settings.MySql.InstallationPath, "bin", "my.ini");
+                }
+                if (!File.Exists(iniPath))
+                {
+                    iniPath = Path.Combine(settings.MySql.InstallationPath, "my.ini");
+                }
+                if (File.Exists(iniPath))
+                {
+                    var lines = File.ReadAllLines(iniPath);
+                    foreach (var line in lines)
+                    {
+                        var trimmed = line.Trim();
+                        if (trimmed.StartsWith("port", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var parts = trimmed.Split('=');
+                            if (parts.Length == 2 && int.TryParse(parts[1].Trim(), out int p) && p > 0)
+                            {
+                                return p;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return 3306;
+        }
+
+        public async Task<bool> DumpAllDatabasesAsync(
+            string targetFilePath,
+            string username,
+            string password,
+            string host = "127.0.0.1",
+            IProgress<UpdateProgressReport>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            string? dumpTool = DetectDumpToolPath();
+            if (string.IsNullOrEmpty(dumpTool) || !File.Exists(dumpTool))
+            {
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.Failed,
+                    StepTitle = "Dump Tool Not Found",
+                    Message = "[ERROR] mysqldump / mariadb-dump executable not found in MySQL bin folder.",
+                    Percentage = 100,
+                    IsError = true
+                });
+                return false;
+            }
+
+            var settings = _settingsService.CurrentSettings;
+            string serviceName = settings.MySql.ServiceName;
+            // Works for both modes: service if installed, standalone process otherwise (never a second instance).
+            {
+                if (!_serviceManager.IsMySqlProcessRunning(settings.MySql.InstallationPath))
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ConfigApplication,
+                        StepTitle = "Starting MySQL",
+                        Message = "[SERVICE] MySQL is not running. Starting it to perform the database dump...",
+                        Percentage = 10,
+                        IsIndeterminate = true
+                    });
+                    var svcProgress = new Progress<string>(msg =>
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.ConfigApplication,
+                            StepTitle = "Starting MySQL Service",
+                            Message = $"[SERVICE] {msg}",
+                            Percentage = 15,
+                            IsIndeterminate = true
+                        });
+                    });
+                    await _serviceManager.EnsureMySqlRunningAsync(serviceName, settings.MySql.InstallationPath, settings.MySql.IniPath, svcProgress);
+                }
+            }
+
+            return await Task.Run(async () =>
+            {
+                try
+                {
+                    string? dir = Path.GetDirectoryName(targetFilePath);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+
+                    int port = DetectMySqlPort();
+                    string user = string.IsNullOrWhiteSpace(username) ? "root" : username.Trim();
+                    var argList = new List<string>
+                    {
+                        $"-u {user}",
+                        $"-h {host.Trim()}",
+                        $"-P {port}",
+                        "--all-databases",
+                        "--add-drop-table",
+                        "--routines",
+                        "--events",
+                        "--triggers",
+                        "--hex-blob"
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(password))
+                    {
+                        argList.Add($"--password=\"{password.Trim()}\"");
+                    }
+
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = dumpTool,
+                        Arguments = string.Join(" ", argList),
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true,
+                        WorkingDirectory = Path.GetDirectoryName(dumpTool) ?? string.Empty
+                    };
+
+                    string loggedArgs = psi.Arguments;
+                    if (!string.IsNullOrEmpty(password))
+                    {
+                        loggedArgs = loggedArgs.Replace($"\"{password.Trim()}\"", "\"******\"").Replace(password.Trim(), "******");
+                    }
+
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ConfigApplication,
+                        StepTitle = "Dumping Databases",
+                        Message = $"[COMMAND] {Path.GetFileName(dumpTool)} {loggedArgs}",
+                        Percentage = 25,
+                        IsIndeterminate = true
+                    });
+
+                    using var process = new Process { StartInfo = psi };
+                    var errBuilder = new StringBuilder();
+
+                    process.ErrorDataReceived += (_, e) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(e.Data))
+                        {
+                            lock (errBuilder)
+                            {
+                                errBuilder.AppendLine(e.Data);
+                            }
+                            string sanitized = !string.IsNullOrEmpty(password)
+                                ? e.Data.Replace(password.Trim(), "******")
+                                : e.Data;
+                            progress?.Report(new UpdateProgressReport
+                            {
+                                Step = UpdateStep.ConfigApplication,
+                                StepTitle = "Dump Info/Warning",
+                                Message = $"[DUMP WARN] {sanitized}",
+                                Percentage = 50,
+                                IsIndeterminate = true
+                            });
+                        }
+                    };
+
+                    process.Start();
+                    process.BeginErrorReadLine();
+
+                    await using (var fileStream = new FileStream(targetFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true))
+                    {
+                        await process.StandardOutput.BaseStream.CopyToAsync(fileStream, cancellationToken);
+                        await fileStream.FlushAsync(cancellationToken);
+                    }
+
+                    while (!process.WaitForExit(200))
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            try { process.Kill(true); } catch { }
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
+                    }
+
+                    int exitCode = process.ExitCode;
+                    if (exitCode == 0 && File.Exists(targetFilePath))
+                    {
+                        long size = new FileInfo(targetFilePath).Length;
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Complete,
+                            StepTitle = "Database Dump Complete",
+                            Message = $"[SUCCESS] All databases successfully dumped to: {targetFilePath} ({ArchiveService.FormatBytes(size)})",
+                            Percentage = 100,
+                            IsIndeterminate = false
+                        });
+                        return true;
+                    }
+                    else
+                    {
+                        string errText = errBuilder.ToString().Trim();
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Failed,
+                            StepTitle = "Database Dump Failed",
+                            Message = $"[ERROR] Dump tool exited with code {exitCode}. {errText}",
+                            Percentage = 100,
+                            IsError = true,
+                            IsIndeterminate = false
+                        });
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.Failed,
+                        StepTitle = "Database Dump Failed",
+                        Message = $"[ERROR] Dump failed: {ex.Message}",
+                        Percentage = 100,
+                        IsError = true,
+                        IsIndeterminate = false
+                    });
+                    return false;
+                }
+            }, cancellationToken);
+        }
+
+        public async Task<bool> RestoreDatabaseFromSqlFileAsync(
+            string sqlFilePath,
+            string username,
+            string password,
+            string host = "127.0.0.1",
+            IProgress<UpdateProgressReport>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (!File.Exists(sqlFilePath))
+            {
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.Failed,
+                    StepTitle = "File Not Found",
+                    Message = $"[ERROR] SQL file not found: {sqlFilePath}",
+                    Percentage = 100,
+                    IsError = true
+                });
+                return false;
+            }
+
+            string? clientTool = DetectMySqlClientToolPath();
+            if (string.IsNullOrEmpty(clientTool) || !File.Exists(clientTool))
+            {
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.Failed,
+                    StepTitle = "Client Tool Not Found",
+                    Message = "[ERROR] mysql / mariadb client executable not found in MySQL bin folder.",
+                    Percentage = 100,
+                    IsError = true
+                });
+                return false;
+            }
+
+            var settings = _settingsService.CurrentSettings;
+            string serviceName = settings.MySql.ServiceName;
+            // Works for both modes: service if installed, standalone process otherwise (never a second instance).
+            {
+                if (!_serviceManager.IsMySqlProcessRunning(settings.MySql.InstallationPath))
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ConfigApplication,
+                        StepTitle = "Starting MySQL",
+                        Message = "[SERVICE] MySQL is not running. Starting it to restore the database...",
+                        Percentage = 10,
+                        IsIndeterminate = true
+                    });
+                    var svcProgress = new Progress<string>(msg =>
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.ConfigApplication,
+                            StepTitle = "Starting MySQL Service",
+                            Message = $"[SERVICE] {msg}",
+                            Percentage = 15,
+                            IsIndeterminate = true
+                        });
+                    });
+                    await _serviceManager.EnsureMySqlRunningAsync(serviceName, settings.MySql.InstallationPath, settings.MySql.IniPath, svcProgress);
+                }
+            }
+
+            return await Task.Run(async () =>
+            {
+                try
+                {
+                    int port = DetectMySqlPort();
+                    string user = string.IsNullOrWhiteSpace(username) ? "root" : username.Trim();
+                    var argList = new List<string>
+                    {
+                        $"-u {user}",
+                        $"-h {host.Trim()}",
+                        $"-P {port}",
+                        "--default-character-set=utf8mb4"
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(password))
+                    {
+                        argList.Add($"--password=\"{password.Trim()}\"");
+                    }
+
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = clientTool,
+                        Arguments = string.Join(" ", argList),
+                        UseShellExecute = false,
+                        RedirectStandardInput = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true,
+                        WorkingDirectory = Path.GetDirectoryName(clientTool) ?? string.Empty
+                    };
+
+                    string loggedArgs = psi.Arguments;
+                    if (!string.IsNullOrEmpty(password))
+                    {
+                        loggedArgs = loggedArgs.Replace($"\"{password.Trim()}\"", "\"******\"").Replace(password.Trim(), "******");
+                    }
+
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ConfigApplication,
+                        StepTitle = "Restoring Database",
+                        Message = $"[COMMAND] {Path.GetFileName(clientTool)} {loggedArgs} < \"{Path.GetFileName(sqlFilePath)}\"",
+                        Percentage = 25,
+                        IsIndeterminate = true
+                    });
+
+                    using var process = new Process { StartInfo = psi };
+                    var errBuilder = new StringBuilder();
+
+                    process.OutputDataReceived += (_, e) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(e.Data))
+                        {
+                            progress?.Report(new UpdateProgressReport
+                            {
+                                Step = UpdateStep.ConfigApplication,
+                                StepTitle = "Restore Output",
+                                Message = e.Data,
+                                Percentage = 50,
+                                IsIndeterminate = true
+                            });
+                        }
+                    };
+
+                    process.ErrorDataReceived += (_, e) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(e.Data))
+                        {
+                            lock (errBuilder)
+                            {
+                                errBuilder.AppendLine(e.Data);
+                            }
+                            progress?.Report(new UpdateProgressReport
+                            {
+                                Step = UpdateStep.ConfigApplication,
+                                StepTitle = "Restore Stderr",
+                                Message = $"[RESTORE WARN/ERROR] {e.Data}",
+                                Percentage = 60,
+                                IsIndeterminate = true
+                            });
+                        }
+                    };
+
+                    process.Start();
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+
+                    await using (var fileStream = new FileStream(sqlFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, useAsync: true))
+                    {
+                        await fileStream.CopyToAsync(process.StandardInput.BaseStream, cancellationToken);
+                        await process.StandardInput.BaseStream.FlushAsync(cancellationToken);
+                        process.StandardInput.Close();
+                    }
+
+                    while (!process.WaitForExit(200))
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            try { process.Kill(true); } catch { }
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
+                    }
+
+                    int exitCode = process.ExitCode;
+                    if (exitCode == 0)
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Complete,
+                            StepTitle = "Database Restore Complete",
+                            Message = $"[SUCCESS] Successfully restored database from: {Path.GetFileName(sqlFilePath)}",
+                            Percentage = 100,
+                            IsIndeterminate = false
+                        });
+                        return true;
+                    }
+                    else
+                    {
+                        string errText = errBuilder.ToString().Trim();
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Failed,
+                            StepTitle = "Database Restore Failed",
+                            Message = $"[ERROR] Restore exited with code {exitCode}. {errText}",
+                            Percentage = 100,
+                            IsError = true,
+                            IsIndeterminate = false
+                        });
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.Failed,
+                        StepTitle = "Database Restore Failed",
+                        Message = $"[ERROR] Restore exception: {ex.Message}",
+                        Percentage = 100,
+                        IsError = true,
+                        IsIndeterminate = false
+                    });
+                    return false;
+                }
+            }, cancellationToken);
+        }
+
+        public async Task<bool> RunMariaDbInstallDbAsync(
+            IProgress<UpdateProgressReport>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            string? installDbTool = DetectInstallDbToolPath();
+            if (string.IsNullOrEmpty(installDbTool) || !File.Exists(installDbTool))
+            {
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.Failed,
+                    StepTitle = "Tool Not Found",
+                    Message = "[ERROR] mariadb-install-db.exe or mysql_install_db.exe not found in MySQL bin directory.",
+                    Percentage = 100,
+                    IsError = true
+                });
+                return false;
+            }
+
+            var settings = _settingsService.CurrentSettings;
+            string serviceName = settings.MySql.ServiceName;
+            // Stop whichever mode is running (service and/or standalone process) before initialising the data dir.
+            if (_serviceManager.ServiceExists(serviceName) || _serviceManager.IsMySqlProcessRunning(settings.MySql.InstallationPath))
+            {
+                progress?.Report(new UpdateProgressReport
+                {
+                    Step = UpdateStep.ConfigApplication,
+                    StepTitle = "Stopping MySQL",
+                    Message = "[SERVICE] Stopping MySQL prior to running mariadb-install-db...",
+                    Percentage = 10,
+                    IsIndeterminate = true
+                });
+                await _serviceManager.StopMySqlAnyAsync(serviceName, settings.MySql.InstallationPath);
+                await Task.Delay(1000, cancellationToken);
+            }
+
+            string dataDir = Path.Combine(settings.MySql.InstallationPath, "data");
+            if (!Directory.Exists(dataDir))
+            {
+                Directory.CreateDirectory(dataDir);
+            }
+
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = installDbTool,
+                        Arguments = $"--datadir=\"{dataDir.Replace('\\', '/')}\"",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true,
+                        WorkingDirectory = Path.GetDirectoryName(installDbTool) ?? string.Empty
+                    };
+
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.ConfigApplication,
+                        StepTitle = "Running mariadb-install-db",
+                        Message = $"[COMMAND] {Path.GetFileName(installDbTool)} {psi.Arguments}",
+                        Percentage = 25,
+                        IsIndeterminate = true
+                    });
+
+                    using var process = new Process { StartInfo = psi };
+                    var errBuilder = new StringBuilder();
+
+                    process.OutputDataReceived += (_, e) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(e.Data))
+                        {
+                            progress?.Report(new UpdateProgressReport
+                            {
+                                Step = UpdateStep.ConfigApplication,
+                                StepTitle = "mariadb-install-db Output",
+                                Message = e.Data,
+                                Percentage = 50,
+                                IsIndeterminate = true
+                            });
+                        }
+                    };
+
+                    process.ErrorDataReceived += (_, e) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(e.Data))
+                        {
+                            lock (errBuilder)
+                            {
+                                errBuilder.AppendLine(e.Data);
+                            }
+                            progress?.Report(new UpdateProgressReport
+                            {
+                                Step = UpdateStep.ConfigApplication,
+                                StepTitle = "mariadb-install-db Info/Warning",
+                                Message = $"[INSTALL-DB WARN] {e.Data}",
+                                Percentage = 60,
+                                IsIndeterminate = true
+                            });
+                        }
+                    };
+
+                    process.Start();
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+
+                    while (!process.WaitForExit(200))
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            try { process.Kill(true); } catch { }
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
+                    }
+
+                    int exitCode = process.ExitCode;
+                    if (exitCode == 0)
+                    {
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Complete,
+                            StepTitle = "mariadb-install-db Complete",
+                            Message = "[SUCCESS] mariadb-install-db completed successfully. System tables created/updated.",
+                            Percentage = 100,
+                            IsIndeterminate = false
+                        });
+                        return true;
+                    }
+                    else
+                    {
+                        string errText = errBuilder.ToString().Trim();
+                        progress?.Report(new UpdateProgressReport
+                        {
+                            Step = UpdateStep.Failed,
+                            StepTitle = "mariadb-install-db Failed",
+                            Message = $"[ERROR] mariadb-install-db exited with code {exitCode}. {errText}",
+                            Percentage = 100,
+                            IsError = true,
+                            IsIndeterminate = false
+                        });
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    progress?.Report(new UpdateProgressReport
+                    {
+                        Step = UpdateStep.Failed,
+                        StepTitle = "mariadb-install-db Failed",
+                        Message = $"[ERROR] Exception executing mariadb-install-db: {ex.Message}",
+                        Percentage = 100,
+                        IsError = true,
+                        IsIndeterminate = false
                     });
                     return false;
                 }

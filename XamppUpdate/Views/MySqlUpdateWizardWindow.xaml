@@ -40,9 +40,9 @@
 
                 <!-- Title & Version Info -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="MySQL / MariaDB Update Pipeline" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                    <TextBlock Text="MySQL / MariaDB Update Pipeline" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding CurrentInstalledVersion, StringFormat='Active Installed Version: {0}'}"
-                               FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                               FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0" />
                 </StackPanel>
 
                 <!-- Steps Breadcrumb -->
@@ -303,17 +303,35 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Button Grid.Column="0" Style="{StaticResource SecondaryButtonStyle}"
-                                            Content="🛠️ Direct Database Upgrade (Step 4) →"
-                                            Command="{Binding ProceedToStep4Command}"
-                                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
-                                            Padding="14,9" FontSize="12.5" />
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="🛠️ Direct Database Upgrade (Step 4) →"
+                                                Command="{Binding ProceedToStep4Command}"
+                                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
+                                                Padding="14,9" FontSize="12.5" />
+
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="{Binding ServiceInstallButtonText}"
+                                                Command="{Binding ToggleServiceInstallCommand}"
+                                                IsEnabled="{Binding CanToggleServiceInstall}"
+                                                Padding="14,9" FontSize="12.5"
+                                                Margin="10,0,0,0"
+                                                ToolTip="Install or remove MySQL Windows service (only available while MySQL is stopped)" />
+
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="{Binding ServiceRunButtonText}"
+                                                Command="{Binding ToggleServiceRunCommand}"
+                                                IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
+                                                Padding="14,9" FontSize="12.5"
+                                                Margin="10,0,0,0"
+                                                ToolTip="Start or stop MySQL (via Windows service if installed, or background process if not installed)" />
+                                    </StackPanel>
 
                                     <Button Grid.Column="2" Style="{StaticResource PrimaryButtonStyle}"
-                                            Content="🔍 Next: Inspect &amp; Compare Configurations →"
+                                            Content="Next"
                                             Command="{Binding ProcessStep1Command}"
                                             IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
-                                            Padding="20,10" FontSize="13.5" />
+                                            Padding="24,10" FontSize="13.5" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -470,6 +488,60 @@
                                 <TextBlock Text="✓ 6. Restart MySQL &amp; Apache Services &amp; Verify Status" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
                             </StackPanel>
                         </Grid>
+
+                        <!-- Admin login for the upgrade-safe shutdown (innodb_fast_shutdown=0 + clean stop). Required when root has a password. -->
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,12,0,0"
+                                Visibility="{Binding IsExecuting, Converter={StaticResource InverseBoolToVisConverter}}">
+                            <StackPanel>
+                                <TextBlock Text="🔐 Database admin login (for a safe, clean shutdown before files are replaced)"
+                                           FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,6" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="140" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="User:" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBox Grid.Column="1" Text="{Binding MySqlUpgradeUser, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBoxStyle}" FontSize="12" Padding="8,4" />
+
+                                    <TextBlock Grid.Column="2" Text="Password:" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="14,0,8,0" />
+                                    <PasswordBox Grid.Column="3" x:Name="Step3PasswordBox"
+                                                 PasswordChar="●"
+                                                 PasswordChanged="UpgradePasswordBox_PasswordChanged"
+                                                 Style="{StaticResource ModernPasswordBoxStyle}" FontSize="12" Padding="8,4" />
+
+                                    <Button Grid.Column="4" Style="{StaticResource SecondaryButtonStyle}"
+                                            Content="🔌 Test Login"
+                                            Command="{Binding TestLoginCommand}"
+                                            IsEnabled="{Binding IsTestingLogin, Converter={StaticResource InverseBoolConverter}}"
+                                            Padding="12,4" FontSize="12" Margin="14,0,0,0" />
+
+                                    <TextBlock Grid.Column="5" Text="{Binding LoginTestMessage}" TextWrapping="Wrap" FontSize="11.5" VerticalAlignment="Center" Margin="12,0,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="#B91C1C" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding LoginTestSucceeded}" Value="True">
+                                                        <Setter Property="Foreground" Value="#15803D" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                                <TextBlock Text="Leave the password empty for a default XAMPP root account. Needed when root has a password (typical for production)."
+                                           FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                                <CheckBox Content="If MySQL is stopped, start the current version first so InnoDB can recover and shut down cleanly (recommended)"
+                                          IsChecked="{Binding StartMySqlFirstForCleanShutdown}"
+                                          FontSize="12" Margin="0,8,0,0"
+                                          ToolTip="A stopped server can still have a dirty redo log from an earlier crash or kill. The new version cannot replay it ('Upgrade after a crash is not supported')." />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
 
@@ -660,7 +732,7 @@
                                      Padding="14,6" Margin="8,0,0,0" />
                         </Grid>
 
-                        <!-- Service Control & Engine Log Cleanup Bar -->
+                        <!-- Service Control & Maintenance Tools Bar -->
                         <Border Background="{StaticResource SurfaceSubtleBgBrush}"
                                 BorderBrush="{StaticResource BorderBrush}"
                                 BorderThickness="1"
@@ -668,52 +740,109 @@
                                 Padding="12,8"
                                 Margin="0,0,0,10">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-                                <!-- Left: Service Status & Start/Stop -->
-                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="MySQL Service:" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                    <Border Background="{StaticResource SurfaceBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8,3" Margin="0,0,10,0">
-                                        <TextBlock Text="{Binding ServiceStatusDisplay}" FontWeight="Bold" FontSize="11.5" Foreground="{StaticResource PrimaryAccentBrush}" VerticalAlignment="Center" />
-                                    </Border>
+                                <!-- Row 0: MySQL Service Control, Dump & Restore -->
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                    <Button Style="{StaticResource SuccessButtonStyle}"
-                                            Content="▶️ Start Service"
-                                            Command="{Binding StartMySqlServiceCommand}"
-                                            IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
-                                            Padding="10,4" FontSize="11.5" Margin="0,0,6,0" />
+                                    <!-- Left: Service Status & Service / DB Backup Actions -->
+                                    <WrapPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="MySQL Service:" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,4" />
+                                        <controls:StatusBadge Status="{Binding ServiceStatus}" Text="{Binding ServiceStatusDisplay}" ToolTip="{Binding ProcessDetail}" Margin="0,0,10,4" VerticalAlignment="Center" />
 
-                                    <Button Style="{StaticResource SecondaryButtonStyle}"
-                                            Content="⏹️ Stop Service"
-                                            Command="{Binding StopMySqlServiceCommand}"
-                                            IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
-                                            Padding="10,4" FontSize="11.5" Margin="0,0,10,0" />
-                                </StackPanel>
+                                        <Button Style="{StaticResource SuccessButtonStyle}"
+                                                Content="{Binding ServiceStartButtonText}"
+                                                Command="{Binding StartMySqlServiceCommand}"
+                                                IsEnabled="{Binding CanStartService}"
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,6,4" />
 
-                                <!-- Right: Service & Config Tools -->
-                                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <Button Style="{StaticResource SecondaryButtonStyle}"
-                                            Content="📝 Open my.ini"
-                                            Command="{Binding OpenMyIniFileCommand}"
-                                            ToolTip="Opens my.ini in your default text editor to configure MySQL settings."
-                                            Padding="10,5" FontSize="11.5" Margin="0,0,6,0" />
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="{Binding ServiceStopButtonText}"
+                                                Command="{Binding StopMySqlServiceCommand}"
+                                                IsEnabled="{Binding CanStopService}"
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,10,4" />
 
-                                    <Button Style="{StaticResource SecondaryButtonStyle}"
-                                            Content="📄 Error Log"
-                                            Command="{Binding OpenErrorLogFileCommand}"
-                                            ToolTip="Opens MySQL error log (mysql_error.log or hostname.err) in your default text editor."
-                                            Padding="10,5" FontSize="11.5" Margin="0,0,6,0" />
+                                        <Button Style="{StaticResource PrimaryButtonStyle}"
+                                                Content="💾 Dump All Databases"
+                                                Command="{Binding DumpAllDatabasesCommand}"
+                                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
+                                                ToolTip="Exports all databases, schemas, routines, and triggers into a single .sql backup file using mysqldump / mariadb-dump."
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,6,4" />
 
-                                    <Button Style="{StaticResource SecondaryButtonStyle}"
-                                            Content="↩️ Restore .bak Files"
-                                            Command="{Binding RestoreRenamedFilesCommand}"
-                                            IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
-                                            ToolTip="Restores all .bak files in data/ back to their original names."
-                                            Padding="10,5" FontSize="11.5" />
-                                </StackPanel>
+                                        <Button Style="{StaticResource DangerButtonStyle}"
+                                                Content="📥 Restore DB (.sql)"
+                                                Command="{Binding RestoreDatabaseCommand}"
+                                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
+                                                ToolTip="⚠️ Dangerous: Restores database schemas and tables from an existing .sql dump file using mysql / mariadb client."
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,6,4" />
+                                    </WrapPanel>
+
+                                    <!-- Right: Service & Config Tools -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="📝 Open my.ini"
+                                                Command="{Binding OpenMyIniFileCommand}"
+                                                ToolTip="Opens my.ini in your default text editor to configure MySQL settings."
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,6,0" />
+
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="📄 Error Log"
+                                                Command="{Binding OpenErrorLogFileCommand}"
+                                                ToolTip="Opens MySQL error log (mysql_error.log or hostname.err) in your default text editor."
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,6,0" />
+
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="↩️ Restore .bak Files"
+                                                Command="{Binding RestoreRenamedFilesCommand}"
+                                                IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
+                                                ToolTip="Restores all .bak files in data/ back to their original names."
+                                                Padding="10,4" FontSize="11.5" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Separator -->
+                                <Separator Grid.Row="1" Margin="0,4,0,8" Background="{StaticResource BorderBrush}" Opacity="0.6" />
+
+                                <!-- Row 2: MySQL Maintenance Bar -->
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="Maintenance:" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource SuccessButtonStyle}"
+                                                Content="🚀 Run Full Upgrade"
+                                                Command="{Binding RunMySqlUpgradeCommand}"
+                                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
+                                                ToolTip="Runs mysql_upgrade / mariadb-upgrade to check, repair, and upgrade internal system tables across all databases."
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,6,0" />
+
+                                        <Button Style="{StaticResource WarningButtonStyle}"
+                                                Content="⚡ Update System Tables Only (-s)"
+                                                Command="{Binding RunSystemTablesUpgradeOnlyCommand}"
+                                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
+                                                ToolTip="Skips mysqlcheck phase and directly recreates/upgrades system tables (mysql.gtid_slave_pos, innodb_index_stats, etc.)"
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,6,0" />
+
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="🛠️ mariadb-install-db.exe"
+                                                Command="{Binding RunMariaDbInstallDbCommand}"
+                                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
+                                                ToolTip="Runs mariadb-install-db.exe to initialize or recreate system database tables in the data folder."
+                                                Padding="10,4" FontSize="11.5" Margin="0,0,6,0" />
+                                    </StackPanel>
+                                </Grid>
                             </Grid>
                         </Border>
 
@@ -805,19 +934,6 @@
                     </Border>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <Button Style="{StaticResource WarningButtonStyle}"
-                                Content="⚡ Upgrade System Tables Only (-s)"
-                                Command="{Binding RunSystemTablesUpgradeOnlyCommand}"
-                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
-                                ToolTip="Skips mysqlcheck phase and directly recreates/upgrades system tables (mysql.gtid_slave_pos, innodb_index_stats, etc.)"
-                                Padding="14,10" Margin="0,0,10,0" FontSize="13" />
-
-                        <Button Style="{StaticResource SuccessButtonStyle}"
-                                Content="🚀 Run Full Upgrade"
-                                Command="{Binding RunMySqlUpgradeCommand}"
-                                IsEnabled="{Binding IsUpgradingDatabase, Converter={StaticResource InverseBoolConverter}}"
-                                Padding="18,10" Margin="0,0,10,0" FontSize="13.5" />
-
                         <Button Style="{StaticResource PrimaryButtonStyle}"
                                 Content="✅ Finish &amp; Close"
                                 Command="{Binding CancelOrCloseCommand}"
@@ -835,7 +951,12 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="XAMPP Local Server Updater • MySQL / MariaDB Upgrade Wizard" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                <!-- Left: live service / process state (kept here so it never collides with the step breadcrumb) -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="MySQL:" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <controls:StatusBadge Status="{Binding ServiceStatus}" Text="{Binding ServiceStatusDisplay}" ToolTip="{Binding ProcessDetail}" VerticalAlignment="Center" />
+                    <TextBlock Text="•  XAMPP Local Server Updater" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                </StackPanel>
                 <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Content="✕ Cancel &amp; Close" Command="{Binding CancelOrCloseCommand}" Padding="12,6" />
             </Grid>
         </Border>
