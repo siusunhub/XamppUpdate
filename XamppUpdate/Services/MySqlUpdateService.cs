@@ -837,27 +837,32 @@ namespace XamppUpdate.Services
                     AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.System
                 };
 
-                var allIncomingFiles = Directory.GetFiles(incomingMySqlRoot, "*.*", enumOptions);
-                int totalFiles = allIncomingFiles.Length;
-                int copiedCount = 0;
-
-                foreach (var srcFile in allIncomingFiles)
+                if (!isTestMode)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    await MySqlDeployHelper.DeployNewFilesAsync(incomingMySqlRoot, localMySqlDir, progress, cancellationToken);
+                }
 
-                    string relPath = Path.GetRelativePath(incomingMySqlRoot, srcFile);
+                if (isTestMode)
+                {
+                    var allIncomingFiles = Directory.GetFiles(incomingMySqlRoot, "*", enumOptions);
+                    int totalFiles = allIncomingFiles.Length;
+                    int copiedCount = 0;
 
-                    // Skip any file in data directory
-                    if (IsDataDirectory(relPath))
+                    foreach (var srcFile in allIncomingFiles)
                     {
-                        continue;
-                    }
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                    string destFile = Path.Combine(localMySqlDir, relPath);
-                    copiedCount++;
+                        string relPath = Path.GetRelativePath(incomingMySqlRoot, srcFile);
 
-                    if (isTestMode)
-                    {
+                        // Skip any file in data directory
+                        if (MySqlDeployHelper.IsDataDirectory(relPath))
+                        {
+                            continue;
+                        }
+
+                        string destFile = Path.Combine(localMySqlDir, relPath);
+                        copiedCount++;
+
                         progress?.Report(new UpdateProgressReport
                         {
                             Step = UpdateStep.FileReplacement,
@@ -865,27 +870,6 @@ namespace XamppUpdate.Services
                             Message = $"[SIMULATE COPY] {srcFile} -> {destFile}",
                             Percentage = 50 + ((double)copiedCount / Math.Max(1, totalFiles) * 20.0)
                         });
-                    }
-                    else
-                    {
-                        string? destFolder = Path.GetDirectoryName(destFile);
-                        if (!string.IsNullOrEmpty(destFolder) && !Directory.Exists(destFolder))
-                        {
-                            Directory.CreateDirectory(destFolder);
-                        }
-
-                        File.Copy(srcFile, destFile, true);
-
-                        if (copiedCount % 25 == 0 || copiedCount == totalFiles)
-                        {
-                            progress?.Report(new UpdateProgressReport
-                            {
-                                Step = UpdateStep.FileReplacement,
-                                StepTitle = "Deploying New MySQL Files",
-                                Message = $"[DEPLOY] Copied {copiedCount}/{totalFiles} files: {relPath}",
-                                Percentage = 50 + ((double)copiedCount / Math.Max(1, totalFiles) * 20.0)
-                            });
-                        }
                     }
                 }
 
@@ -918,29 +902,7 @@ namespace XamppUpdate.Services
                     }
                     else
                     {
-                        string contentToWrite = diffItem.Resolution switch
-                        {
-                            ConfigFileResolution.KeepCurrent => diffItem.OriginalLocalContent,
-                            ConfigFileResolution.OverwriteWithNew => diffItem.IncomingContent,
-                            ConfigFileResolution.UseMerged => diffItem.MergedContent,
-                            _ => diffItem.OriginalLocalContent
-                        };
-
-                        string? iniFolder = Path.GetDirectoryName(destIniPath);
-                        if (!string.IsNullOrEmpty(iniFolder) && !Directory.Exists(iniFolder))
-                        {
-                            Directory.CreateDirectory(iniFolder);
-                        }
-
-                        await File.WriteAllTextAsync(destIniPath, contentToWrite, new UTF8Encoding(false), cancellationToken);
-
-                        progress?.Report(new UpdateProgressReport
-                        {
-                            Step = UpdateStep.ConfigApplication,
-                            StepTitle = "Applying Configuration",
-                            Message = $"[CONFIG] Applied {diffItem.Resolution} resolution to '{diffItem.RelativeFilePath}'.",
-                            Percentage = 80
-                        });
+                        await MySqlDeployHelper.ApplyConfigsAsync(new[] { diffItem }, localMySqlDir, progress, cancellationToken);
                     }
                 }
 
@@ -975,97 +937,14 @@ namespace XamppUpdate.Services
                     }
                     else
                     {
-                        bool movedSuccessfully = false;
-
-                        // Primary Approach: Atomic Directory Move (instant, zero risk of InnoDB page corruption)
-                        if (!Directory.Exists(destDataDir))
+                        await MySqlDeployHelper.MigrateDataAsync(srcDataDir, destDataDir, progress, cancellationToken);
+                        progress?.Report(new UpdateProgressReport
                         {
-                            try
-                            {
-                                Directory.Move(srcDataDir, destDataDir);
-                                movedSuccessfully = true;
-                                progress?.Report(new UpdateProgressReport
-                                {
-                                    Step = UpdateStep.FileReplacement,
-                                    StepTitle = "Data Migration Complete",
-                                    Message = $"[DATA] Preserved database data directory '{destDataDir}'. Files were kept as-is; InnoDB consistency depends on MySQL having been shut down cleanly beforehand.",
-                                    Percentage = 90
-                                });
-                            }
-                            catch (Exception ex)
-                            {
-                                progress?.Report(new UpdateProgressReport
-                                {
-                                    Step = UpdateStep.FileReplacement,
-                                    StepTitle = "Data Migration",
-                                    Message = $"[DATA WARNING] Direct move not available ({ex.Message}). Falling back to stream migration...",
-                                    Percentage = 83
-                                });
-                            }
-                        }
-
-                        // Fallback Approach: Chunked Stream Migration (if move fails or dest exists)
-                        if (!movedSuccessfully)
-                        {
-                            var dataFiles = Directory.GetFiles(srcDataDir, "*.*", enumOptions);
-                            int totalDataFiles = dataFiles.Length;
-                            long totalDataBytes = 0;
-                            foreach (var f in dataFiles)
-                            {
-                                try { totalDataBytes += new FileInfo(f).Length; } catch { }
-                            }
-
-                            progress?.Report(new UpdateProgressReport
-                            {
-                                Step = UpdateStep.FileReplacement,
-                                StepTitle = "Migrating Database Data",
-                                Message = $"{modeTag}Migrating {totalDataFiles} database files ({ArchiveService.FormatBytes(totalDataBytes)})...",
-                                Percentage = 83
-                            });
-
-                            int dataCopied = 0;
-                            long totalDataBytesCopied = 0;
-
-                            foreach (var srcDataFile in dataFiles)
-                            {
-                                cancellationToken.ThrowIfCancellationRequested();
-                                dataCopied++;
-
-                                string relDataPath = Path.GetRelativePath(srcDataDir, srcDataFile);
-                                string destDataFile = Path.Combine(destDataDir, relDataPath);
-
-                                long bytesCopied = await CopyFileChunkedAsync(
-                                    srcDataFile,
-                                    destDataFile,
-                                    relDataPath,
-                                    totalDataBytes,
-                                    totalDataBytesCopied,
-                                    progress,
-                                    modeTag,
-                                    cancellationToken);
-                                totalDataBytesCopied += bytesCopied;
-
-                                if (dataCopied % 50 == 0 || dataCopied == totalDataFiles)
-                                {
-                                    double overallPercent = totalDataBytes > 0 ? (double)totalDataBytesCopied / totalDataBytes * 100.0 : 100.0;
-                                    progress?.Report(new UpdateProgressReport
-                                    {
-                                        Step = UpdateStep.FileReplacement,
-                                        StepTitle = "Migrating Database Data",
-                                        Message = $"[DATA] Copied {dataCopied}/{totalDataFiles} database files ({ArchiveService.FormatBytes(totalDataBytesCopied)} / {ArchiveService.FormatBytes(totalDataBytes)} - {overallPercent:F0}%)...",
-                                        Percentage = 83 + (overallPercent * 0.07)
-                                    });
-                                }
-                            }
-
-                            progress?.Report(new UpdateProgressReport
-                            {
-                                Step = UpdateStep.FileReplacement,
-                                StepTitle = "Data Migration Complete",
-                                Message = $"[DATA] Successfully migrated {totalDataFiles} database file(s) ({ArchiveService.FormatBytes(totalDataBytesCopied)}) to '{destDataDir}'.",
-                                Percentage = 90
-                            });
-                        }
+                            Step = UpdateStep.FileReplacement,
+                            StepTitle = "Data Migration Complete",
+                            Message = $"[DATA] Preserved database data directory '{destDataDir}'. Files were kept as-is; InnoDB consistency depends on MySQL having been shut down cleanly beforehand.",
+                            Percentage = 90
+                        });
                     }
                 }
                 else
@@ -2303,14 +2182,7 @@ namespace XamppUpdate.Services
             }, cancellationToken);
         }
 
-        private static bool IsDataDirectory(string relativePath)
-        {
-            string norm = relativePath.Replace('\\', '/').TrimStart('/');
-            return norm.Equals("data", StringComparison.OrdinalIgnoreCase) ||
-                   norm.StartsWith("data/", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static async Task<long> CopyFileChunkedAsync(
+        internal static async Task<long> CopyFileChunkedAsync(
             string sourcePath,
             string destinationPath,
             string relativePath,

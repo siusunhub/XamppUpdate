@@ -321,17 +321,26 @@
                                         <Button Style="{StaticResource SecondaryButtonStyle}"
                                                 Content="{Binding ServiceRunButtonText}"
                                                 Command="{Binding ToggleServiceRunCommand}"
-                                                IsEnabled="{Binding IsOperatingService, Converter={StaticResource InverseBoolConverter}}"
+                                                IsEnabled="{Binding CanToggleServiceRun}"
                                                 Padding="14,9" FontSize="12.5"
                                                 Margin="10,0,0,0"
                                                 ToolTip="Start or stop MySQL (via Windows service if installed, or background process if not installed)" />
                                     </StackPanel>
 
-                                    <Button Grid.Column="2" Style="{StaticResource PrimaryButtonStyle}"
-                                            Content="Next"
-                                            Command="{Binding ProcessStep1Command}"
-                                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
-                                            Padding="24,10" FontSize="13.5" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                        <Button Style="{StaticResource SecondaryButtonStyle}"
+                                                Content="🧪 Real Test Upgrade"
+                                                Command="{Binding RealTestUpgradeCommand}"
+                                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
+                                                Padding="16,10" FontSize="13" Margin="0,0,10,0"
+                                                ToolTip="Copy MySQL to a new folder, run it on another port and rehearse the upgrade there. Production is not modified." />
+
+                                        <Button Style="{StaticResource PrimaryButtonStyle}"
+                                                Content="Next"
+                                                Command="{Binding ProcessStep1Command}"
+                                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
+                                                Padding="24,10" FontSize="13.5" />
+                                    </StackPanel>
                                 </Grid>
                             </StackPanel>
                         </Border>

@@ -24,3 +24,8 @@ config/settings.user.json
 Thumbs.db
 .idea/
 .vscode/
+docs/
+*.Tests/
+temp/
+.superpowers
+XamppUpdate.Tests/

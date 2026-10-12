@@ -17,8 +17,17 @@ namespace XamppUpdate.Services
 
             try
             {
-                return ServiceController.GetServices()
-                    .Any(s => string.Equals(s.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase));
+                // GetServices() returns one handle-owning ServiceController per service: dispose them all
+                // (this runs on a 2 s status poll, so leaking them adds up quickly).
+                var services = ServiceController.GetServices();
+                try
+                {
+                    return services.Any(s => string.Equals(s.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase));
+                }
+                finally
+                {
+                    foreach (var s in services) s.Dispose();
+                }
             }
             catch
             {
@@ -33,7 +42,12 @@ namespace XamppUpdate.Services
             try
             {
                 var services = ServiceController.GetServices();
-                return services.FirstOrDefault(s => string.Equals(s.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase));
+                var match = services.FirstOrDefault(s => string.Equals(s.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase));
+                foreach (var s in services)
+                {
+                    if (!ReferenceEquals(s, match)) s.Dispose();
+                }
+                return match;
             }
             catch
             {
@@ -729,6 +743,13 @@ namespace XamppUpdate.Services
 
         public async Task<bool> SafeShutdownMySqlAsync(string serviceName, string mySqlPath, string user, string password, int port = 3306, IProgress<string>? progress = null)
         {
+            var report = await SafeShutdownMySqlDetailedAsync(serviceName, mySqlPath, user, password, port, progress);
+            // Production semantics unchanged: true when nothing was aborted and no process remains.
+            return !report.Aborted && (!report.WasRunning || report.ProcessExited);
+        }
+
+        public async Task<MySqlShutdownReport> SafeShutdownMySqlDetailedAsync(string serviceName, string mySqlPath, string user, string password, int port = 3306, IProgress<string>? progress = null)
+        {
             void Log(string phase, string message) => progress?.Report($"[{phase}] {message}");
             const string pLogin = "SHUTDOWN 1/4 LOGIN";
             const string pFlush = "SHUTDOWN 2/4 FLUSH";
@@ -739,7 +760,7 @@ namespace XamppUpdate.Services
             if (!serviceExists && !IsMySqlProcessRunning(mySqlPath))
             {
                 Log(pStop, "MySQL is not running. Nothing to shut down. OK");
-                return true;
+                return new MySqlShutdownReport { WasRunning = false };
             }
 
             string effectiveUser = string.IsNullOrWhiteSpace(user) ? "root" : user.Trim();
@@ -749,6 +770,16 @@ namespace XamppUpdate.Services
             bool running = IsMySqlProcessRunning(mySqlPath);
             bool loggedIn = false;
             string flushState = "SKIPPED";
+            var logMark = XamppUpdate.Services.Uat.ErrorLogEvidence.Capture(mySqlPath);
+            var logSizes = XamppUpdate.Services.Uat.ErrorLogEvidence.SnapshotAll(mySqlPath);
+            if (!string.IsNullOrEmpty(logMark.Path))
+            {
+                Log(pLogin, $"Detected active error log: {Path.GetFileName(logMark.Path)} (initial length: {logMark.Length})");
+            }
+            string? originalFlush = null;
+            bool flushChanged = false;
+            bool stopRequested = false;
+            bool aborted = false;
 
             // ---- 1/4 LOGIN (also reads the current innodb_fast_shutdown value) ----
             if (running)
@@ -759,13 +790,18 @@ namespace XamppUpdate.Services
                 }
                 else
                 {
-                    string cmd = $"{Path.GetFileName(client)} -u {effectiveUser} -h 127.0.0.1 -P {port} -N -B -e \"SELECT @@GLOBAL.innodb_fast_shutdown\"";
+                    string cmd = $"{Path.GetFileName(client)} --no-defaults -u {effectiveUser} -h 127.0.0.1 -P {port} -N -B -e \"SELECT @@GLOBAL.innodb_fast_shutdown\"";
                     Log(pLogin, $"Running: {cmd}");
                     var (code, output) = await RunToolWithPasswordAsync(
                         client,
-                        $"-u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -N -B -e \"SELECT @@GLOBAL.innodb_fast_shutdown\"",
+                        $"--no-defaults -u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -N -B -e \"SELECT @@GLOBAL.innodb_fast_shutdown\"",
                         password, Path.GetDirectoryName(client));
                     loggedIn = code == 0;
+                    if (loggedIn)
+                    {
+                        string scalar = ExtractScalar(output);
+                        if (scalar.Length > 0 && scalar.All(char.IsDigit)) originalFlush = scalar;
+                    }
                     Log(pLogin, loggedIn
                         ? $"OK (exit 0). Current innodb_fast_shutdown = {ExtractScalar(output)}"
                         : $"FAILED (exit {code}): {output.Trim()}");
@@ -779,11 +815,11 @@ namespace XamppUpdate.Services
             // ---- 2/4 FLUSH: SET GLOBAL innodb_fast_shutdown=0 and read it back ----
             if (loggedIn && client != null)
             {
-                string setCmd = $"{Path.GetFileName(client)} -u {effectiveUser} -h 127.0.0.1 -P {port} -e \"SET GLOBAL innodb_fast_shutdown=0\"";
+                string setCmd = $"{Path.GetFileName(client)} --no-defaults -u {effectiveUser} -h 127.0.0.1 -P {port} -e \"SET GLOBAL innodb_fast_shutdown=0\"";
                 Log(pFlush, $"Running: {setCmd}");
                 var (setCode, setOut) = await RunToolWithPasswordAsync(
                     client,
-                    $"-u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -e \"SET GLOBAL innodb_fast_shutdown=0\"",
+                    $"--no-defaults -u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -e \"SET GLOBAL innodb_fast_shutdown=0\"",
                     password, Path.GetDirectoryName(client));
 
                 string readBack = string.Empty;
@@ -791,7 +827,7 @@ namespace XamppUpdate.Services
                 {
                     var (getCode, getOut) = await RunToolWithPasswordAsync(
                         client,
-                        $"-u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -N -B -e \"SELECT @@GLOBAL.innodb_fast_shutdown\"",
+                        $"--no-defaults -u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -N -B -e \"SELECT @@GLOBAL.innodb_fast_shutdown\"",
                         password, Path.GetDirectoryName(client));
                     // stdout and stderr are merged: client warnings (e.g. the passwordless ssl-verify notice) must not
                     // be mistaken for the value, so take the numeric line only.
@@ -801,13 +837,23 @@ namespace XamppUpdate.Services
                 if (setCode == 0 && readBack == "0")
                 {
                     flushState = "OK";
+                    flushChanged = true;
                     Log(pFlush, "OK (exit 0). Read-back innodb_fast_shutdown = 0: InnoDB will fully flush on shutdown.");
                 }
                 else
                 {
                     // Logged in but the command did not take effect: stop here, MySQL is still running untouched.
                     Log(pFlush, $"FAILED (exit {setCode}, read-back \"{readBack}\"): {setOut.Trim()}. MySQL was NOT stopped.");
-                    return false;
+                    aborted = true;
+                    // SET may have succeeded even though the read-back did not confirm it: put the original value back.
+                    if (setCode == 0 && !string.IsNullOrEmpty(originalFlush))
+                    {
+                        var (rCode, rOut) = await RestoreFlushAsync(client, effectiveUser, port, password, originalFlush);
+                        Log(pFlush, rCode == 0
+                            ? $"OK: restored innodb_fast_shutdown={originalFlush}."
+                            : $"FAILED (exit {rCode}): could not restore innodb_fast_shutdown={originalFlush}: {rOut.Trim()}");
+                    }
+                    return new MySqlShutdownReport { WasRunning = running, LoggedIn = loggedIn, FlushVerified = false, Aborted = true };
                 }
             }
             else
@@ -824,6 +870,7 @@ namespace XamppUpdate.Services
                 Log(pStop, $"Running: stop service '{serviceName}' (graceful, up to 120s)");
                 bool svcStopped = await StopServiceAsync(serviceName, TimeSpan.FromSeconds(120), progress == null ? null : new Progress<string>(m => Log(pStop, m)));
                 Log(pStop, svcStopped ? $"OK: service '{serviceName}' stopped." : $"FAILED: service '{serviceName}' did not reach Stopped.");
+                if (svcStopped) stopRequested = true;
                 stopFailed |= !svcStopped;
             }
 
@@ -832,12 +879,13 @@ namespace XamppUpdate.Services
                 bool shutdownRequested = false;
                 if (admin != null)
                 {
-                    Log(pStop, $"Running: {Path.GetFileName(admin)} -u {effectiveUser} -h 127.0.0.1 -P {port} shutdown");
+                    Log(pStop, $"Running: {Path.GetFileName(admin)} --no-defaults -u {effectiveUser} -h 127.0.0.1 -P {port} shutdown");
                     var (code, output) = await RunToolWithPasswordAsync(
                         admin,
-                        $"-u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 shutdown",
+                        $"--no-defaults -u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 shutdown",
                         password, Path.GetDirectoryName(admin));
                     shutdownRequested = code == 0;
+                    if (shutdownRequested) stopRequested = true;
                     Log(pStop, shutdownRequested
                         ? "OK: shutdown requested (exit 0). Waiting for the process to exit..."
                         : $"FAILED: shutdown request refused (exit {code}): {output.Trim()}. If root has a password, enter it and retry.");
@@ -859,20 +907,32 @@ namespace XamppUpdate.Services
             if (IsMySqlProcessRunning(mySqlPath))
             {
                 Log(pStop, "FAILED: MySQL is still running after the graceful shutdown timeout. Nothing was killed.");
-                return false;
+                // Production stayed up: put the runtime flush setting back the way we found it.
+                if (flushChanged && client != null && !string.IsNullOrEmpty(originalFlush))
+                {
+                    var (rCode, rOut) = await RestoreFlushAsync(client, effectiveUser, port, password, originalFlush);
+                    Log(pStop, rCode == 0
+                        ? $"OK: restored innodb_fast_shutdown={originalFlush}."
+                        : $"FAILED (exit {rCode}): could not restore innodb_fast_shutdown={originalFlush}: {rOut.Trim()}");
+                }
+                return new MySqlShutdownReport { WasRunning = true, LoggedIn = loggedIn, FlushVerified = flushState == "OK", StopRequested = stopRequested };
             }
             Log(pStop, stopFailed
                 ? "OK: no mysqld process remains (the service reported a stop issue, see above)."
                 : "OK: no MySQL process remains.");
 
             // ---- 4/4 VERIFY: the server's own log should say the shutdown completed ----
-            bool verified = VerifyShutdownInErrorLog(mySqlPath);
-            Log(pVerify, verified
-                ? "OK: error log reports 'Shutdown complete'."
-                : "UNVERIFIED: 'Shutdown complete' not found in the error log tail. The process exited without being killed.");
+            var (fresh, logDetail) = await XamppUpdate.Services.Uat.ErrorLogEvidence.CheckGrownLogsAsync(logSizes, mySqlPath);
+            Log(pVerify, fresh
+                ? $"OK: error log reports shutdown completion ({logDetail})."
+                : $"NOT SEEN: no shutdown completion line in the error log during this shutdown ({logDetail}). The copy's restart is checked for crash recovery instead. Active log: '{logMark.Path ?? "none"}', initial offset: {logMark.Length}.");
 
-            Log("SHUTDOWN SUMMARY", $"login={(loggedIn ? "OK" : "-")}  flush(innodb_fast_shutdown=0)={flushState}  stop=OK  log={(verified ? "OK" : "unverified")}");
-            return true;
+            Log("SHUTDOWN SUMMARY", $"login={(loggedIn ? "OK" : "-")}  flush(innodb_fast_shutdown=0)={flushState}  stop=OK  log={(fresh ? "OK" : "not seen")}");
+            return new MySqlShutdownReport
+            {
+                WasRunning = true, LoggedIn = loggedIn, FlushVerified = flushState == "OK",
+                StopRequested = stopRequested, ProcessExited = true, FreshShutdownEvidence = fresh, Aborted = aborted
+            };
         }
 
         public async Task<(bool Success, string Message)> TestMySqlLoginAsync(string mySqlPath, string user, string password, int port = 3306)
@@ -892,7 +952,7 @@ namespace XamppUpdate.Services
 
             var (code, output) = await RunToolWithPasswordAsync(
                 client,
-                $"-u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -N -B -e \"SHOW GRANTS FOR CURRENT_USER();\"",
+                $"--no-defaults -u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -N -B -e \"SHOW GRANTS FOR CURRENT_USER();\"",
                 password,
                 Path.GetDirectoryName(client));
 
@@ -916,6 +976,13 @@ namespace XamppUpdate.Services
             return (true, $"Login OK as '{effectiveUser}' (port {port}), but the account may lack " +
                           $"{(canSetVariables ? string.Empty : "SUPER ")}{(canShutdown ? string.Empty : "SHUTDOWN ")}privileges. " +
                           "Use root or another admin account for a clean shutdown.");
+        }
+
+        private static Task<(int ExitCode, string Output)> RestoreFlushAsync(string client, string effectiveUser, int port, string password, string originalFlush)
+        {
+            return RunToolWithPasswordAsync(client,
+                $"--no-defaults -u \"{effectiveUser}\" -h 127.0.0.1 -P {port} --connect-timeout=10 -e \"SET GLOBAL innodb_fast_shutdown={originalFlush}\"",
+                password, Path.GetDirectoryName(client));
         }
 
         /// <summary>Last line made only of digits (the scalar from `-N -B -e "SELECT ..."`), ignoring warning lines.</summary>
@@ -1048,6 +1115,123 @@ namespace XamppUpdate.Services
             }
 
             return ok && !IsApacheProcessRunning(apachePath);
+        }
+
+        public string? GetServiceImagePath(string serviceName)
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{serviceName}");
+                return key?.GetValue("ImagePath") as string;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>True/false when the registry answer is reliable; null when it could not be read.</summary>
+        private static bool? ServiceRegistryKeyExists(string serviceName)
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{serviceName}");
+                return key != null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public async Task<bool> InstallOwnedMySqlServiceManualAsync(string mySqlPath, string serviceName, string iniPath, IProgress<string>? progress = null)
+        {
+            // Establish reliably that the name is unused: both SCM enumeration and the registry must say so.
+            bool? registryExists = ServiceRegistryKeyExists(serviceName);
+            if (registryExists == null)
+            {
+                progress?.Report($"FAILED: could not verify that service '{serviceName}' is unused (registry unreadable); nothing was installed.");
+                return false;
+            }
+            if (registryExists == true || ServiceExists(serviceName))
+            {
+                progress?.Report($"FAILED: a service named '{serviceName}' already exists; it will not be reused or replaced.");
+                return false;
+            }
+            bool? existedBefore = false;
+
+            string? daemon = FindMySqlDaemon(mySqlPath);
+            if (daemon == null)
+            {
+                progress?.Report($"FAILED: mysqld/mariadbd not found under '{mySqlPath}'.");
+                return false;
+            }
+
+            progress?.Report($"Running: {Path.GetFileName(daemon)} --install-manual {serviceName} --defaults-file=<copy ini>");
+            var (code, output) = await RunProcessAsync(daemon, $"--install-manual \"{serviceName}\" --defaults-file=\"{iniPath}\"", mySqlPath);
+            await Task.Delay(500);
+
+            string? image = GetServiceImagePath(serviceName);
+            bool owned = image != null &&
+                         XamppUpdate.Services.Uat.PathSafety.IsSameOrUnder(XamppUpdate.Services.Uat.ServiceImagePath.ExtractExecutable(image), mySqlPath);
+            if (owned)
+            {
+                progress?.Report($"OK: service '{serviceName}' registered for manual start.");
+                return true;
+            }
+
+            progress?.Report($"FAILED: service registration did not produce an executable under the copy (exit {code}: {output.Trim()}).");
+            bool existsNow = ServiceRegistryKeyExists(serviceName) == true || ServiceExists(serviceName);
+            if (!existsNow)
+            {
+                return false;
+            }
+
+            if (image == null)
+            {
+                progress?.Report($"WARNING: service '{serviceName}' is half-registered (its ImagePath could not be read).");
+            }
+
+            if (XamppUpdate.Services.Uat.ServiceInstallGuard.MayDeleteAfterFailedInstall(existedBefore, existsNow))
+            {
+                var (delCode, delOut) = await RunProcessAsync("sc.exe", $"delete \"{serviceName}\"");
+                await Task.Delay(500);
+                bool gone = ServiceRegistryKeyExists(serviceName) != true && !ServiceExists(serviceName);
+                progress?.Report(gone
+                    ? $"OK: half-registered service '{serviceName}' removed."
+                    : $"FAILED to remove half-registered service '{serviceName}' (exit {delCode}: {delOut.Trim()}). Run: sc.exe delete \"{serviceName}\"");
+            }
+            else
+            {
+                progress?.Report($"Leftover service '{serviceName}' needs manual cleanup: sc.exe delete \"{serviceName}\"");
+            }
+            return false;
+        }
+
+        public async Task<bool> RemoveServiceIfOwnedAsync(string serviceName, string expectedRoot, IProgress<string>? progress = null)
+        {
+            if (!ServiceExists(serviceName)) return true;
+
+            string? image = GetServiceImagePath(serviceName);
+            if (image == null || !XamppUpdate.Services.Uat.PathSafety.IsSameOrUnder(XamppUpdate.Services.Uat.ServiceImagePath.ExtractExecutable(image), expectedRoot))
+            {
+                progress?.Report($"refused: not registered to {expectedRoot}; if you are certain it is a leftover, remove it manually with: sc.exe delete \"{serviceName}\"");
+                return false;
+            }
+
+            bool stopped = await StopServiceAsync(serviceName, TimeSpan.FromSeconds(60), progress);
+            if (!stopped)
+            {
+                progress?.Report($"WARNING: service '{serviceName}' did not report a clean stop before removal.");
+            }
+            var (code, output) = await RunProcessAsync("sc.exe", $"delete \"{serviceName}\"");
+            await Task.Delay(500);
+
+            bool removed = !ServiceExists(serviceName);
+            progress?.Report(removed
+                ? $"OK: service '{serviceName}' removed."
+                : $"FAILED to remove '{serviceName}'{(stopped ? string.Empty : " (stop failed)")} (exit {code}: {output.Trim()}). Run: sc.exe delete \"{serviceName}\"");
+            return removed;
         }
 
         // ==========================================

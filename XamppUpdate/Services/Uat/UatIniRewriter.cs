@@ -9,8 +9,12 @@ namespace XamppUpdate.Services.Uat;
 /// <summary>Pure text operations on my.ini / *.cnf content. No file or process access.</summary>
 public static class UatIniRewriter
 {
-    // A root match must end at a segment boundary: "mysql" must not match "mysql_old" or "mysql.bak".
-    private const string Boundary = @"(?![\w.\-])";
+    // A root match must end at a segment boundary: end-of-string, a separator, a quote or whitespace.
+    // "mysql" must not match "mysql_old", "mysql.bak", "mysql;C:\other" or "mysql+x".
+    private const string Boundary = @"(?=$|[\\/""'\s])";
+
+    private static readonly Regex HeaderRegex =
+        new(@"^\s*\uFEFF?\s*\[([^\]]+)\]\s*(?:[#;].*)?$", RegexOptions.CultureInvariant);
 
     private static readonly string[] WritablePathKeys =
     {
@@ -29,9 +33,20 @@ public static class UatIniRewriter
         return new Regex(joined + Boundary, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
-    private static string[] SplitLines(string content) => content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+    private static string StripBom(string content) =>
+        content.Length > 0 && content[0] == '\uFEFF' ? content[1..] : content;
+
+    private static string BomOf(string content) =>
+        content.Length > 0 && content[0] == '\uFEFF' ? "\uFEFF" : string.Empty;
+
+    private static string[] SplitLines(string content) =>
+        StripBom(content).Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
 
     private static bool IsComment(string trimmed) => trimmed.StartsWith('#') || trimmed.StartsWith(';');
+
+    // '-' and '_' are interchangeable in MySQL option names.
+    private static bool SameKey(string a, string b) =>
+        string.Equals(a.Trim().Replace('_', '-'), b.Trim().Replace('_', '-'), StringComparison.OrdinalIgnoreCase);
 
     public static string RewriteRoot(string content, string oldRoot, string newRoot)
     {
@@ -52,20 +67,26 @@ public static class UatIniRewriter
             .ToList();
     }
 
-    private static (int Start, int End) FindSection(IList<string> lines, string section)
+    private static bool TryHeader(string line, out string name)
     {
+        var m = HeaderRegex.Match(line);
+        name = m.Success ? m.Groups[1].Value.Trim() : string.Empty;
+        return m.Success;
+    }
+
+    /// <summary>All blocks (header index, exclusive end index) of the named section; a section may repeat.</summary>
+    private static List<(int Start, int End)> FindSections(IList<string> lines, string section)
+    {
+        var blocks = new List<(int Start, int End)>();
         int start = -1;
-        int end = lines.Count;
         for (int i = 0; i < lines.Count; i++)
         {
-            string t = lines[i].Trim().TrimStart('\uFEFF');
-            if (t.StartsWith('[') && t.EndsWith(']'))
-            {
-                if (start >= 0) { end = i; break; }
-                if (string.Equals(t.Trim('[', ']').Trim(), section, StringComparison.OrdinalIgnoreCase)) start = i;
-            }
+            if (!TryHeader(lines[i], out string name)) continue;
+            if (start >= 0) { blocks.Add((start, i)); start = -1; }
+            if (string.Equals(name, section, StringComparison.OrdinalIgnoreCase)) start = i;
         }
-        return (start, end);
+        if (start >= 0) blocks.Add((start, lines.Count));
+        return blocks;
     }
 
     private static string KeyOf(string trimmedLine)
@@ -74,51 +95,61 @@ public static class UatIniRewriter
         return (eq >= 0 ? trimmedLine[..eq] : trimmedLine).Trim();
     }
 
+    private static bool IsActiveKeyLine(string line, string key, out string trimmed)
+    {
+        trimmed = line.TrimStart();
+        return !(IsComment(trimmed) || trimmed.Length == 0) && SameKey(KeyOf(trimmed), key);
+    }
+
     public static string SetOption(string content, string section, string key, string value)
     {
+        string bom = BomOf(content);
         string nl = content.Contains("\r\n") ? "\r\n" : "\n";
         var lines = SplitLines(content).ToList();
-        var (start, end) = FindSection(lines, section);
+        var blocks = FindSections(lines, section);
         string newLine = $"{key}={value}";
 
-        if (start < 0)
+        if (blocks.Count == 0)
         {
             while (lines.Count > 0 && lines[^1].Trim().Length == 0) lines.RemoveAt(lines.Count - 1);
             lines.Add(string.Empty);
             lines.Add($"[{section}]");
             lines.Add(newLine);
             lines.Add(string.Empty);
-            return string.Join(nl, lines);
+            return bom + string.Join(nl, lines);
         }
 
         bool replaced = false;
-        for (int i = start + 1; i < end; i++)
+        foreach (var (start, end) in blocks)
         {
-            string t = lines[i].TrimStart();
-            if (IsComment(t) || t.Length == 0) continue;
-            if (string.Equals(KeyOf(t), key, StringComparison.OrdinalIgnoreCase))
+            for (int i = start + 1; i < end; i++)
             {
-                lines[i] = newLine;
-                replaced = true;
+                if (IsActiveKeyLine(lines[i], key, out _))
+                {
+                    lines[i] = newLine;
+                    replaced = true;
+                }
             }
         }
-        if (!replaced) lines.Insert(start + 1, newLine);
-        return string.Join(nl, lines);
+        if (!replaced)
+        {
+            var (start, end) = blocks[^1];
+            int insertAt = end;
+            while (insertAt > start + 1 && lines[insertAt - 1].Trim().Length == 0) insertAt--;
+            lines.Insert(insertAt, newLine);
+        }
+        return bom + string.Join(nl, lines);
     }
 
     public static string? GetOption(string content, string section, string key)
     {
         var lines = SplitLines(content);
-        var (start, end) = FindSection(lines, section);
-        if (start < 0) return null;
-
         string? found = null;
-        for (int i = start + 1; i < end; i++)
+        foreach (var (start, end) in FindSections(lines, section))
         {
-            string t = lines[i].TrimStart();
-            if (IsComment(t) || t.Length == 0) continue;
-            if (string.Equals(KeyOf(t), key, StringComparison.OrdinalIgnoreCase))
+            for (int i = start + 1; i < end; i++)
             {
+                if (!IsActiveKeyLine(lines[i], key, out string t)) continue;
                 int eq = t.IndexOf('=');
                 found = eq >= 0 ? t[(eq + 1)..].Trim().Trim('"') : string.Empty;
             }
@@ -128,21 +159,23 @@ public static class UatIniRewriter
 
     public static string CommentOutOptions(string content, string section, params string[] keys)
     {
+        string bom = BomOf(content);
         string nl = content.Contains("\r\n") ? "\r\n" : "\n";
         var lines = SplitLines(content).ToList();
-        var (start, end) = FindSection(lines, section);
-        if (start < 0) return content;
+        var blocks = FindSections(lines, section);
+        if (blocks.Count == 0) return content;
 
-        for (int i = start + 1; i < end; i++)
+        foreach (var (start, end) in blocks)
         {
-            string t = lines[i].TrimStart();
-            if (IsComment(t) || t.Length == 0) continue;
-            if (keys.Any(k => string.Equals(KeyOf(t), k, StringComparison.OrdinalIgnoreCase)))
+            for (int i = start + 1; i < end; i++)
             {
-                lines[i] = "# [UAT disabled] " + lines[i];
+                if (keys.Any(k => IsActiveKeyLine(lines[i], k, out _)))
+                {
+                    lines[i] = "# [UAT disabled] " + lines[i];
+                }
             }
         }
-        return string.Join(nl, lines);
+        return bom + string.Join(nl, lines);
     }
 
     public static bool ContainsInclude(string content) =>
@@ -154,10 +187,10 @@ public static class UatIniRewriter
         foreach (var line in SplitLines(content))
         {
             string t = line.TrimStart();
-            if (IsComment(t) || t.Length == 0 || t.StartsWith('[')) continue;
+            if (IsComment(t) || t.Length == 0 || TryHeader(t, out _)) continue;
 
             string key = KeyOf(t);
-            if (!WritablePathKeys.Contains(key, StringComparer.OrdinalIgnoreCase)) continue;
+            if (!WritablePathKeys.Any(k => SameKey(k, key))) continue;
 
             int eq = t.IndexOf('=');
             if (eq < 0) continue;
@@ -172,7 +205,8 @@ public static class UatIniRewriter
         return result;
     }
 
+    // Any key containing pass(word|wd) (loose-password, master-password, ssl-key-password...). Never crosses a line.
     public static string RedactSecrets(string content) =>
-        Regex.Replace(content, @"^(\s*(?:password|passwd)\s*=\s*).+$", "$1******",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        Regex.Replace(content, @"^([ \t]*[\w.\-]*pass(?:word|wd)[\w.\-]*[ \t]*=[ \t]*)[^\r\n]+", "$1******",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant);
 }

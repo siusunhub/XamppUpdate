@@ -100,6 +100,10 @@ namespace XamppUpdate.ViewModels
         private ConfigDiffItem? _selectedDiffItem;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceRun))]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceInstall))]
+        [NotifyPropertyChangedFor(nameof(CanStartService))]
+        [NotifyPropertyChangedFor(nameof(CanStopService))]
         private bool _isBusy;
 
         [ObservableProperty]
@@ -152,6 +156,10 @@ namespace XamppUpdate.ViewModels
         private string _mySqlUpgradeArguments = "-h 127.0.0.1 --force --verbose";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceRun))]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceInstall))]
+        [NotifyPropertyChangedFor(nameof(CanStartService))]
+        [NotifyPropertyChangedFor(nameof(CanStopService))]
         private bool _isUpgradingDatabase;
 
         [ObservableProperty]
@@ -179,25 +187,31 @@ namespace XamppUpdate.ViewModels
         [NotifyPropertyChangedFor(nameof(CanStartService))]
         [NotifyPropertyChangedFor(nameof(CanStopService))]
         [NotifyPropertyChangedFor(nameof(CanToggleServiceInstall))]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceRun))]
         private bool _isServiceRunning;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanStartService))]
         [NotifyPropertyChangedFor(nameof(CanStopService))]
         [NotifyPropertyChangedFor(nameof(CanToggleServiceInstall))]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceRun))]
         private bool _isOperatingService;
 
         /// <summary>True while the Windows service is in a Start/Stop/Pause/Continue pending state.</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanToggleServiceInstall))]
+        [NotifyPropertyChangedFor(nameof(CanToggleServiceRun))]
         private bool _isServiceTransitioning;
 
-        /// <summary>Install/Remove Service is only allowed in the fully stopped state.</summary>
-        public bool CanToggleServiceInstall => !IsOperatingService && !IsServiceRunning && !IsServiceTransitioning;
+        /// <summary>Install/Remove Service is only allowed in the fully stopped state and when not busy/operating.</summary>
+        public bool CanToggleServiceInstall => !IsOperatingService && !IsServiceRunning && !IsServiceTransitioning && !IsBusy && !IsUpgradingDatabase;
+
+        /// <summary>Start/Stop MySQL in step 1 is only allowed when not busy, not transitioning, and not already operating the service.</summary>
+        public bool CanToggleServiceRun => !IsOperatingService && !IsBusy && !IsServiceTransitioning && !IsUpgradingDatabase;
 
         // Start is only meaningful when nothing is running; Stop only when something is.
-        public bool CanStartService => !IsOperatingService && !IsServiceRunning;
-        public bool CanStopService => !IsOperatingService && IsServiceRunning;
+        public bool CanStartService => !IsOperatingService && !IsServiceRunning && !IsBusy && !IsUpgradingDatabase;
+        public bool CanStopService => !IsOperatingService && IsServiceRunning && !IsBusy && !IsUpgradingDatabase;
 
         /// <summary>
         /// True when Start/Stop must go through the Windows service. False when the service is not installed,
@@ -227,6 +241,13 @@ namespace XamppUpdate.ViewModels
         public string ServiceStopButtonText => UseServiceControl ? "⏹️ Stop Service" : "⏹️ Stop Process";
 
         public event Action? RequestClose;
+
+        public sealed record UatLaunchInfo(string IncomingRoot, string IncomingVersion);
+        public event Action<UatLaunchInfo>? RequestOpenUatUpgrade;
+
+        // Exposed so the window can build the UAT service without touching global settings.
+        public ISettingsService SettingsServiceForUat => _settingsService;
+        public IWindowsServiceManager ServiceManagerForUat => _serviceManager;
 
         private readonly IWindowsServiceManager _serviceManager;
 
@@ -321,6 +342,43 @@ namespace XamppUpdate.ViewModels
             catch (Exception ex)
             {
                 ErrorMessage = $"Could not open web browser: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        public async Task RealTestUpgradeAsync()
+        {
+            if (string.IsNullOrWhiteSpace(SourcePathOrUrl))
+            {
+                ErrorMessage = "Please enter a download URL or select a local archive file.";
+                return;
+            }
+
+            ErrorMessage = string.Empty;
+            IsBusy = true;
+            IsIndeterminateProgress = true;
+            StatusMessage = "Preparing the incoming package for the UAT run...";
+            _cts = new CancellationTokenSource();
+
+            try
+            {
+                var progress = new Progress<UpdateProgressReport>(r => StatusMessage = r.Message);
+                PreparedIncomingRoot = await _updateService.PrepareIncomingSourceAsync(SourcePathOrUrl, progress, _cts.Token);
+                IncomingDetectedVersion = await _versionDetectionService.DetectMySqlVersionAsync(PreparedIncomingRoot);
+
+                StatusMessage = "Source ready. Opening the UAT window...";
+                RequestOpenUatUpgrade?.Invoke(new UatLaunchInfo(PreparedIncomingRoot, IncomingDetectedVersion));
+                StatusMessage = "Ready.";
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Failed to prepare source: {ex.Message}";
+                StatusMessage = "Preparation failed.";
+            }
+            finally
+            {
+                IsBusy = false;
+                IsIndeterminateProgress = false;
             }
         }
 
@@ -580,8 +638,9 @@ namespace XamppUpdate.ViewModels
             _statusTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             _statusTimer.Tick += async (_, _) =>
             {
-                // Don't fight with an in-flight install/remove/start/stop that refreshes on completion.
-                if (IsOperatingService) return;
+                // Stay out of the way of long operations (extracting/downloading the package, executing the update,
+                // upgrading tables) and of in-flight install/remove/start/stop, which refresh on completion.
+                if (IsOperatingService || IsBusy || IsExecuting || IsUpgradingDatabase) return;
                 await RefreshServiceStatusAsync();
             };
             _statusTimer.Start();
@@ -778,7 +837,7 @@ namespace XamppUpdate.ViewModels
         [RelayCommand]
         public async Task ToggleServiceRunAsync()
         {
-            if (IsOperatingService || IsBusy || IsUpgradingDatabase) return;
+            if (!CanToggleServiceRun) return;
 
             var settings = _settingsService.CurrentSettings;
             string mySqlPath = settings.MySql.InstallationPath;

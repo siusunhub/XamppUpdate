@@ -210,8 +210,9 @@ namespace XamppUpdate.ViewModels
             _statusTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             _statusTimer.Tick += async (_, _) =>
             {
-                // Don't fight with an in-flight install/remove/start/stop that refreshes on completion.
-                if (IsOperatingService) return;
+                // Stay out of the way of long operations (extracting/downloading the package, executing the update)
+                // and of in-flight install/remove/start/stop, which refresh on completion.
+                if (IsOperatingService || IsBusy || IsExecuting) return;
                 await RefreshServiceStatusAsync();
             };
             _statusTimer.Start();
