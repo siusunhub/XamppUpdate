@@ -18,6 +18,7 @@
 temp/
 backup/
 config/settings.user.json
+XamppUpdate.config.json
 
 ## OS & Editor
 .DS_Store
