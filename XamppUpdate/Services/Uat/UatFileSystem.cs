@@ -85,9 +85,9 @@ public sealed class UatFileSystem : IUatFileSystem
             .Select(e => e.FullName)
             .ToList();
 
-    public string ReadAllText(string path) => File.ReadAllText(path);
+    public string ReadAllText(string path) => FileEncodingHelper.ReadAllText(path);
     public void WriteAllText(string path, string content) =>
-        File.WriteAllText(path, content, new System.Text.UTF8Encoding(false));
+        FileEncodingHelper.WriteAllTextPreservingEncoding(path, content);
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
     public void MoveDirectory(string source, string destination) => Directory.Move(source, destination);
 

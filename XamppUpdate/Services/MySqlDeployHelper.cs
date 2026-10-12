@@ -81,7 +81,7 @@ namespace XamppUpdate.Services
                 string? folder = Path.GetDirectoryName(destIni);
                 if (!string.IsNullOrEmpty(folder) && !Directory.Exists(folder)) Directory.CreateDirectory(folder);
 
-                await File.WriteAllTextAsync(destIni, content, new UTF8Encoding(false), ct);
+                await FileEncodingHelper.WriteAllTextPreservingEncodingAsync(destIni, content, ct);
 
                 progress?.Report(new UpdateProgressReport
                 {

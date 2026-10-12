@@ -457,7 +457,7 @@ namespace XamppUpdate.Services
                         {
                             Directory.CreateDirectory(dir);
                         }
-                        await File.WriteAllTextAsync(targetPath, pair.Value, Encoding.UTF8, cancellationToken);
+                        await FileEncodingHelper.WriteAllTextPreservingEncodingAsync(targetPath, pair.Value, cancellationToken);
                     }
                 }
 

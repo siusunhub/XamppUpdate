@@ -412,7 +412,7 @@ namespace XamppUpdate.Services
                         string destFile = Path.Combine(localPhpRoot, kvp.Key.Replace('/', Path.DirectorySeparatorChar));
                         if (!isTestMode)
                         {
-                            File.WriteAllText(destFile, kvp.Value);
+                            FileEncodingHelper.WriteAllTextPreservingEncoding(destFile, kvp.Value);
                         }
                         else
                         {

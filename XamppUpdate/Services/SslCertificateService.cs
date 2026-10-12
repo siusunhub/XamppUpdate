@@ -120,7 +120,7 @@ namespace XamppUpdate.Services
         {
             try
             {
-                var lines = await File.ReadAllLinesAsync(httpdConfPath);
+                var lines = await FileEncodingHelper.ReadAllLinesAsync(httpdConfPath);
                 foreach (var line in lines)
                 {
                     var trimmed = line.Trim();
@@ -148,7 +148,7 @@ namespace XamppUpdate.Services
 
             try
             {
-                var lines = await File.ReadAllLinesAsync(confFilePath);
+                var lines = await FileEncodingHelper.ReadAllLinesAsync(confFilePath);
 
                 bool insideVirtualHost = false;
                 string vhostSpec = string.Empty;

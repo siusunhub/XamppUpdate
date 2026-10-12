@@ -141,7 +141,7 @@ namespace XamppUpdate.Services
 
             try
             {
-                var lines = await File.ReadAllLinesAsync(filePath, Encoding.UTF8);
+                var lines = await FileEncodingHelper.ReadAllLinesAsync(filePath);
                 var entries = new List<VHostEntry>();
                 var preamble = new List<string>();
                 var pendingLeadingLines = new List<string>();
@@ -428,7 +428,17 @@ namespace XamppUpdate.Services
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("File path cannot be empty", nameof(filePath));
 
+            var (encoding, newLine) = File.Exists(filePath)
+                ? FileEncodingHelper.DetectEncodingAndNewLine(filePath)
+                : (FileEncodingHelper.DefaultEncoding, Environment.NewLine);
+
             var sb = new StringBuilder();
+
+            void AppendLine(string? line = null)
+            {
+                if (line != null) sb.Append(line);
+                sb.Append(newLine);
+            }
 
             // 1. Process Preamble & Global Settings
             var preamble = preambleLines != null && preambleLines.Count > 0
@@ -443,36 +453,36 @@ namespace XamppUpdate.Services
 
                 foreach (var line in preamble)
                 {
-                    sb.AppendLine(line);
+                    AppendLine(line);
                 }
 
-                sb.AppendLine();
-                sb.AppendLine("# ===========================================================================");
-                sb.AppendLine("# Let's Encrypt / mod_md Global Configuration");
-                sb.AppendLine("# ===========================================================================");
-                sb.AppendLine("<IfModule md_module>");
+                AppendLine();
+                AppendLine("# ===========================================================================");
+                AppendLine("# Let's Encrypt / mod_md Global Configuration");
+                AppendLine("# ===========================================================================");
+                AppendLine("<IfModule md_module>");
                 string agreement = (globalSettings != null && !string.IsNullOrWhiteSpace(globalSettings.CertificateAgreement))
                     ? globalSettings.CertificateAgreement
                     : "accepted";
-                sb.AppendLine($"    MDCertificateAgreement {agreement}");
+                AppendLine($"    MDCertificateAgreement {agreement}");
                 if (globalSettings != null && !string.IsNullOrWhiteSpace(globalSettings.ContactEmail))
                 {
-                    sb.AppendLine($"    MDContactEmail {globalSettings.ContactEmail}");
+                    AppendLine($"    MDContactEmail {globalSettings.ContactEmail}");
                 }
                 bool baseServer = globalSettings?.MdBaseServer ?? false;
-                sb.AppendLine($"    MDBaseServer {(baseServer ? "on" : "off")}");
+                AppendLine($"    MDBaseServer {(baseServer ? "on" : "off")}");
                 if (globalSettings != null && !string.IsNullOrWhiteSpace(globalSettings.MdCertificateAuthority))
                 {
-                    sb.AppendLine($"    MDCertificateAuthority {globalSettings.MdCertificateAuthority}");
+                    AppendLine($"    MDCertificateAuthority {globalSettings.MdCertificateAuthority}");
                 }
-                sb.AppendLine("</IfModule>");
+                AppendLine("</IfModule>");
             }
             else
             {
                 // Write preamble lines exactly as original!
                 foreach (var line in preamble)
                 {
-                    sb.AppendLine(line);
+                    AppendLine(line);
                 }
             }
 
@@ -492,7 +502,7 @@ namespace XamppUpdate.Services
                         string sslConf = Path.Combine(Path.GetDirectoryName(filePath) ?? string.Empty, "httpd-ssl.conf");
                         if (File.Exists(sslConf))
                         {
-                            otherHostHasCert = (await File.ReadAllLinesAsync(sslConf, Encoding.UTF8))
+                            otherHostHasCert = (await FileEncodingHelper.ReadAllLinesAsync(sslConf))
                                 .Any(l => SslCertFileRegex.IsMatch(l.Trim()) && !l.TrimStart().StartsWith('#'));
                         }
                     }
@@ -515,12 +525,12 @@ namespace XamppUpdate.Services
                 {
                     foreach (var leadLine in entry.LeadingLines)
                     {
-                        sb.AppendLine(leadLine);
+                        AppendLine(leadLine);
                     }
                 }
                 else
                 {
-                    sb.AppendLine();
+                    AppendLine();
                 }
 
                 if (entry.IsParseError && entry.RawLines != null && entry.RawLines.Count > 0)
@@ -528,7 +538,7 @@ namespace XamppUpdate.Services
                     // If block had parse errors, write back raw lines to avoid corrupting user's content
                     foreach (var rawLine in entry.RawLines)
                     {
-                        sb.AppendLine(rawLine);
+                        AppendLine(rawLine);
                     }
                     continue;
                 }
@@ -539,7 +549,7 @@ namespace XamppUpdate.Services
                     var updatedBlockLines = UpdateBlockInPlace(entry, omitFallbackCert && entry.UseLetsEncrypt);
                     foreach (var blockLine in updatedBlockLines)
                     {
-                        sb.AppendLine(blockLine);
+                        AppendLine(blockLine);
                     }
                 }
                 else
@@ -548,7 +558,7 @@ namespace XamppUpdate.Services
                     var newBlockLines = GenerateNewVHostBlock(entry, omitFallbackCert && entry.UseLetsEncrypt);
                     foreach (var blockLine in newBlockLines)
                     {
-                        sb.AppendLine(blockLine);
+                        AppendLine(blockLine);
                     }
                 }
             }
@@ -558,7 +568,7 @@ namespace XamppUpdate.Services
             {
                 foreach (var trailLine in trailingLines)
                 {
-                    sb.AppendLine(trailLine);
+                    AppendLine(trailLine);
                 }
             }
 
@@ -570,7 +580,7 @@ namespace XamppUpdate.Services
             }
 
             string tempFile = Path.Combine(dir, $"{Path.GetFileName(filePath)}.{Guid.NewGuid():N}.tmp");
-            await File.WriteAllTextAsync(tempFile, sb.ToString(), Encoding.UTF8);
+            await File.WriteAllTextAsync(tempFile, sb.ToString(), encoding);
 
             if (File.Exists(filePath))
             {
@@ -1024,7 +1034,7 @@ namespace XamppUpdate.Services
 
             try
             {
-                var lines = await File.ReadAllLinesAsync(confPath, Encoding.UTF8);
+                var lines = await FileEncodingHelper.ReadAllLinesAsync(confPath);
                 foreach (var line in lines)
                 {
                     string trimmed = line.Trim();
@@ -1071,7 +1081,8 @@ namespace XamppUpdate.Services
             {
                 await BackupConfigFileAsync(confPath);
 
-                var lines = (await File.ReadAllLinesAsync(confPath, Encoding.UTF8)).ToList();
+                var (confEncoding, confNewLine) = FileEncodingHelper.DetectEncodingAndNewLine(confPath);
+                var lines = (await FileEncodingHelper.ReadAllLinesAsync(confPath, confEncoding)).ToList();
                 bool mdEnabled = false;
                 bool watchdogEnabled = false;
                 int lastLoadModuleIndex = -1;
@@ -1124,7 +1135,7 @@ namespace XamppUpdate.Services
                 }
 
                 string tempFile = $"{confPath}.{Guid.NewGuid():N}.tmp";
-                await File.WriteAllLinesAsync(tempFile, lines, Encoding.UTF8);
+                await FileEncodingHelper.WriteAllLinesAsync(tempFile, lines, confEncoding, confNewLine);
                 File.Move(tempFile, confPath, overwrite: true);
 
                 return (true, $"Successfully enabled 'mod_md' and 'mod_watchdog' in '{confPath}'.");

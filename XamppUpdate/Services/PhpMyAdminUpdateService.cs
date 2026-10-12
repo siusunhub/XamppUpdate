@@ -363,7 +363,7 @@ namespace XamppUpdate.Services
                     }
                     else if (File.Exists(localConfigPath))
                     {
-                        savedConfigContent = await File.ReadAllTextAsync(localConfigPath, System.Text.Encoding.UTF8);
+                        savedConfigContent = await FileEncodingHelper.ReadAllTextAsync(localConfigPath);
                     }
 
                     // Atomic folder rotation: rename current folder to phpMyAdmin_old
@@ -393,7 +393,7 @@ namespace XamppUpdate.Services
                     if (!string.IsNullOrWhiteSpace(savedConfigContent))
                     {
                         string targetConfig = Path.Combine(localDir, "config.inc.php");
-                        await File.WriteAllTextAsync(targetConfig, savedConfigContent, new System.Text.UTF8Encoding(false));
+                        await FileEncodingHelper.WriteAllTextPreservingEncodingAsync(targetConfig, savedConfigContent);
                         progress?.Report(new UpdateProgressReport
                         {
                             Step = UpdateStep.ConfigApplication,

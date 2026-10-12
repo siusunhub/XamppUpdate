@@ -40,7 +40,7 @@ namespace XamppUpdate.Services
             {
                 if (File.Exists(_configFilePath))
                 {
-                    string json = File.ReadAllText(_configFilePath, Encoding.UTF8);
+                    string json = File.ReadAllText(_configFilePath, FileEncodingHelper.DefaultEncoding);
                     var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
                     if (settings != null)
                     {
@@ -54,7 +54,7 @@ namespace XamppUpdate.Services
                     string legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config", "settings.json");
                     if (File.Exists(legacyPath))
                     {
-                        string json = File.ReadAllText(legacyPath, Encoding.UTF8);
+                        string json = File.ReadAllText(legacyPath, FileEncodingHelper.DefaultEncoding);
                         var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
                         if (settings != null)
                         {
@@ -89,7 +89,7 @@ namespace XamppUpdate.Services
                     }
 
                     string json = JsonSerializer.Serialize(settings, JsonOptions);
-                    File.WriteAllText(_configFilePath, json, Encoding.UTF8);
+                    File.WriteAllText(_configFilePath, json, FileEncodingHelper.DefaultEncoding);
                 }
                 finally
                 {
@@ -114,7 +114,7 @@ namespace XamppUpdate.Services
                 }
 
                 string json = JsonSerializer.Serialize(settings, JsonOptions);
-                await File.WriteAllTextAsync(_configFilePath, json, Encoding.UTF8);
+                await File.WriteAllTextAsync(_configFilePath, json, FileEncodingHelper.DefaultEncoding);
                 _currentSettings = settings;
                 SettingsChanged?.Invoke(this, _currentSettings);
             }

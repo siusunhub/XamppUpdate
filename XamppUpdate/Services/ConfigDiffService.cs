@@ -187,8 +187,8 @@ namespace XamppUpdate.Services
                     Resolution = ConfigFileResolution.KeepCurrent // Default to keeping current working configs safe
                 };
 
-                string oldText = item.LocalExists ? await File.ReadAllTextAsync(localFilePath, Encoding.UTF8) : string.Empty;
-                string newText = item.IncomingExists ? await File.ReadAllTextAsync(incomingFilePath, Encoding.UTF8) : string.Empty;
+                string oldText = item.LocalExists ? await FileEncodingHelper.ReadAllTextAsync(localFilePath) : string.Empty;
+                string newText = item.IncomingExists ? await FileEncodingHelper.ReadAllTextAsync(incomingFilePath) : string.Empty;
 
                 item.OriginalLocalContent = oldText;
                 item.IncomingContent = newText;
