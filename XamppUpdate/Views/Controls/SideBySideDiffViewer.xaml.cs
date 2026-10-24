@@ -202,6 +202,88 @@ namespace XamppUpdate.Views.Controls
                 : _currentSection < 0
                     ? $"{_differenceSections.Count} difference block{(_differenceSections.Count == 1 ? "" : "s")}"
                     : $"Difference {_currentSection + 1} of {_differenceSections.Count}";
+
+            UpdateToolbarBlockButtons();
+        }
+
+        private void UpdateToolbarBlockButtons()
+        {
+            if (_positionRow != null && !IsDifferent(_positionRow))
+            {
+                BtnToolbarInsertBlock.IsEnabled = false;
+                BtnToolbarInsertBlock.Content = "⬅️ Insert Block";
+                BtnToolbarInsertBlock.ToolTip = "Jump to or select a difference block to insert";
+
+                BtnToolbarRemoveBlock.IsEnabled = false;
+                BtnToolbarRemoveBlock.Content = "🗑 Remove Block";
+                BtnToolbarRemoveBlock.ToolTip = "Jump to or select a difference block to remove";
+                return;
+            }
+
+            var targetRow = (_currentSection >= 0 && _currentSection < _differenceSections.Count)
+                ? _differenceSections[_currentSection]
+                : (_positionRow != null && IsDifferent(_positionRow) ? _positionRow : null);
+
+            if (targetRow != null)
+            {
+                var (start, end) = GetBlockRange(targetRow);
+                var rows = DiffItem?.DiffRows;
+                if (start >= 0 && end >= 0 && rows != null)
+                {
+                    var blockRows = rows.Skip(start).Take(end - start + 1).ToList();
+                    int insertCount = blockRows.Count(r => r.Incoming.CanInsert);
+                    int removeCount = blockRows.Count(r => r.Local.CanRemove);
+
+                    BtnToolbarInsertBlock.IsEnabled = insertCount > 1;
+                    BtnToolbarInsertBlock.Content = insertCount > 1 ? $"⬅️ Insert Block ({insertCount})" : "⬅️ Insert Block";
+                    BtnToolbarInsertBlock.ToolTip = insertCount > 1
+                        ? $"Insert or replace current incoming block ({insertCount} lines) into local merged config"
+                        : (insertCount == 1 ? "Current difference is 1 line (use row Insert button or select a multi-line block)" : "No incoming lines to insert in current block");
+
+                    BtnToolbarRemoveBlock.IsEnabled = removeCount > 1;
+                    BtnToolbarRemoveBlock.Content = removeCount > 1 ? $"🗑 Remove Block ({removeCount})" : "🗑 Remove Block";
+                    BtnToolbarRemoveBlock.ToolTip = removeCount > 0
+                        ? (removeCount > 1 ? $"Remove current block of deleted lines ({removeCount} lines) from local merged config" : "Current difference is 1 line (use row Remove button or select a multi-line block)")
+                        : "No deleted lines to remove in current block";
+                    return;
+                }
+            }
+
+            BtnToolbarInsertBlock.IsEnabled = false;
+            BtnToolbarInsertBlock.Content = "⬅️ Insert Block";
+            BtnToolbarInsertBlock.ToolTip = "Jump to or select a difference block to insert";
+
+            BtnToolbarRemoveBlock.IsEnabled = false;
+            BtnToolbarRemoveBlock.Content = "🗑 Remove Block";
+            BtnToolbarRemoveBlock.ToolTip = "Jump to or select a difference block to remove";
+        }
+
+        private void BtnToolbarInsertBlock_Click(object sender, RoutedEventArgs e)
+        {
+            if (_positionRow != null && !IsDifferent(_positionRow)) return;
+
+            var targetRow = (_currentSection >= 0 && _currentSection < _differenceSections.Count)
+                ? _differenceSections[_currentSection]
+                : (_positionRow != null && IsDifferent(_positionRow) ? _positionRow : null);
+
+            if (targetRow != null)
+            {
+                ExecuteInsertBlock(targetRow);
+            }
+        }
+
+        private void BtnToolbarRemoveBlock_Click(object sender, RoutedEventArgs e)
+        {
+            if (_positionRow != null && !IsDifferent(_positionRow)) return;
+
+            var targetRow = (_currentSection >= 0 && _currentSection < _differenceSections.Count)
+                ? _differenceSections[_currentSection]
+                : (_positionRow != null && IsDifferent(_positionRow) ? _positionRow : null);
+
+            if (targetRow != null)
+            {
+                ExecuteRemoveBlock(targetRow);
+            }
         }
 
         private void OnDiffItemAssigned(ConfigDiffItem item)
@@ -396,7 +478,8 @@ namespace XamppUpdate.Views.Controls
                 }
             }
 
-            DiffItem.MergedContent = string.Join(Environment.NewLine, localLines);
+            string lineEnding = DetectLineEnding(DiffItem.MergedContent);
+            DiffItem.MergedContent = string.Join(lineEnding, localLines);
             DiffItem.Resolution = ConfigFileResolution.UseMerged;
             DiffItem.IsCustomMerged = true;
 
@@ -422,7 +505,8 @@ namespace XamppUpdate.Views.Controls
 
             localLines.RemoveAt(targetLineIndex);
 
-            DiffItem.MergedContent = string.Join(Environment.NewLine, localLines);
+            string lineEnding = DetectLineEnding(DiffItem.MergedContent);
+            DiffItem.MergedContent = string.Join(lineEnding, localLines);
             DiffItem.Resolution = ConfigFileResolution.UseMerged;
             DiffItem.IsCustomMerged = true;
 
@@ -430,6 +514,181 @@ namespace XamppUpdate.Views.Controls
             TxtDirectEditor.Text = DiffItem.MergedContent;
 
             ShowNotice("✓ Removed deleted line from merged config");
+        }
+
+        private void BtnInsertBlock_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is DiffRowModel row)
+            {
+                ExecuteInsertBlock(row);
+            }
+        }
+
+        private void BtnRemoveBlock_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is DiffRowModel row)
+            {
+                ExecuteRemoveBlock(row);
+            }
+        }
+
+        private (int startIndex, int endIndex) GetBlockRange(DiffRowModel row)
+        {
+            var rows = DiffItem?.DiffRows;
+            if (rows == null || rows.Count == 0 || row.Index < 0 || row.Index >= rows.Count)
+                return (-1, -1);
+
+            int start = row.Index;
+            while (start > 0 && IsDifferent(rows[start - 1]))
+            {
+                start--;
+            }
+
+            int end = row.Index;
+            while (end < rows.Count - 1 && IsDifferent(rows[end + 1]))
+            {
+                end++;
+            }
+
+            return (start, end);
+        }
+
+        private void ExecuteInsertBlock(DiffRowModel row)
+        {
+            if (DiffItem == null) return;
+            CancelLineEdit();
+            var rows = DiffItem.DiffRows;
+            if (rows == null || rows.Count == 0) return;
+
+            var (startIndex, endIndex) = GetBlockRange(row);
+            if (startIndex < 0 || endIndex < 0) return;
+
+            var blockRows = rows.Skip(startIndex).Take(endIndex - startIndex + 1).ToList();
+            var incomingLinesToInsert = blockRows
+                .Where(r => r.Incoming.CanInsert)
+                .Select(r => r.Incoming.Text)
+                .ToList();
+
+            if (incomingLinesToInsert.Count == 0) return;
+
+            SetNavigationPosition(row);
+            _insertUndo.Push(new InsertUndoState(DiffItem.MergedContent, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
+            BtnUndoInsert.IsEnabled = true;
+
+            var localLines = new List<string>(NormalizeLines(DiffItem.MergedContent));
+
+            // Find all local lines in this block (lines that exist in working/merged local file)
+            var localBlockLines = blockRows
+                .Where(r => r.Local.LineNumber.HasValue && r.Local.Type != DiffLineType.EmptyPlaceholder)
+                .Select(r => r.Local.LineNumber!.Value)
+                .Distinct()
+                .OrderByDescending(n => n)
+                .ToList();
+
+            if (localBlockLines.Count > 0)
+            {
+                int minLine = localBlockLines.Min();
+                int targetIndex = minLine - 1;
+
+                // Remove existing local lines in this block in descending order
+                foreach (int lineNum in localBlockLines)
+                {
+                    int idx = lineNum - 1;
+                    if (idx >= 0 && idx < localLines.Count)
+                    {
+                        localLines.RemoveAt(idx);
+                    }
+                }
+
+                // Insert incoming lines at the start position of this block
+                if (targetIndex >= 0 && targetIndex <= localLines.Count)
+                {
+                    localLines.InsertRange(targetIndex, incomingLinesToInsert);
+                }
+                else
+                {
+                    localLines.AddRange(incomingLinesToInsert);
+                }
+            }
+            else
+            {
+                // No local lines in this block (pure insertion).
+                // Find nearest previous line in DiffRows before startIndex that has a local line number
+                int insertPos = 0;
+                for (int i = startIndex - 1; i >= 0; i--)
+                {
+                    if (i < rows.Count && rows[i].Local.LineNumber.HasValue)
+                    {
+                        insertPos = rows[i].Local.LineNumber!.Value;
+                        break;
+                    }
+                }
+
+                if (insertPos >= 0 && insertPos <= localLines.Count)
+                {
+                    localLines.InsertRange(insertPos, incomingLinesToInsert);
+                }
+                else
+                {
+                    localLines.AddRange(incomingLinesToInsert);
+                }
+            }
+
+            string lineEnding = DetectLineEnding(DiffItem.MergedContent);
+            DiffItem.MergedContent = string.Join(lineEnding, localLines);
+            DiffItem.Resolution = ConfigFileResolution.UseMerged;
+            DiffItem.IsCustomMerged = true;
+
+            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
+            TxtDirectEditor.Text = DiffItem.MergedContent;
+
+            ShowNotice($"✓ Inserted incoming block ({incomingLinesToInsert.Count} line{(incomingLinesToInsert.Count == 1 ? "" : "s")}) into merged config");
+        }
+
+        private void ExecuteRemoveBlock(DiffRowModel row)
+        {
+            if (DiffItem == null) return;
+            CancelLineEdit();
+            var rows = DiffItem.DiffRows;
+            if (rows == null || rows.Count == 0) return;
+
+            var (startIndex, endIndex) = GetBlockRange(row);
+            if (startIndex < 0 || endIndex < 0) return;
+
+            var blockRows = rows.Skip(startIndex).Take(endIndex - startIndex + 1).ToList();
+            var localLinesToRemove = blockRows
+                .Where(r => r.Local.CanRemove && r.Local.LineNumber.HasValue)
+                .Select(r => r.Local.LineNumber!.Value)
+                .Distinct()
+                .OrderByDescending(n => n)
+                .ToList();
+
+            if (localLinesToRemove.Count == 0) return;
+
+            SetNavigationPosition(row);
+            _insertUndo.Push(new InsertUndoState(DiffItem.MergedContent, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
+            BtnUndoInsert.IsEnabled = true;
+
+            var localLines = new List<string>(NormalizeLines(DiffItem.MergedContent));
+
+            foreach (int lineNum in localLinesToRemove)
+            {
+                int targetIndex = lineNum - 1;
+                if (targetIndex >= 0 && targetIndex < localLines.Count)
+                {
+                    localLines.RemoveAt(targetIndex);
+                }
+            }
+
+            string lineEnding = DetectLineEnding(DiffItem.MergedContent);
+            DiffItem.MergedContent = string.Join(lineEnding, localLines);
+            DiffItem.Resolution = ConfigFileResolution.UseMerged;
+            DiffItem.IsCustomMerged = true;
+
+            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
+            TxtDirectEditor.Text = DiffItem.MergedContent;
+
+            ShowNotice($"✓ Removed deleted block ({localLinesToRemove.Count} line{(localLinesToRemove.Count == 1 ? "" : "s")}) from merged config");
         }
 
         private void BtnApplyDirectEdit_Click(object sender, RoutedEventArgs e)
@@ -516,6 +775,12 @@ namespace XamppUpdate.Views.Controls
             BorderActionNotice.Visibility = Visibility.Visible;
             _noticeTimer.Stop();
             _noticeTimer.Start();
+        }
+
+        private static string DetectLineEnding(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return Environment.NewLine;
+            return text.Contains("\r\n") ? "\r\n" : (text.Contains('\n') ? "\n" : Environment.NewLine);
         }
 
         private static string[] NormalizeLines(string text)

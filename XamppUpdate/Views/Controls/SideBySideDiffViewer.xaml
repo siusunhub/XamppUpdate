@@ -46,6 +46,30 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <Style x:Key="MiniActionSuccessButtonStyle" TargetType="Button" BasedOn="{StaticResource MiniActionButtonStyle}">
+            <Setter Property="Background" Value="#DCFCE7" />
+            <Setter Property="Foreground" Value="#15803D" />
+            <Setter Property="BorderBrush" Value="#86EFAC" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#BBF7D0" />
+                    <Setter Property="Foreground" Value="#166534" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="MiniActionDangerButtonStyle" TargetType="Button" BasedOn="{StaticResource MiniActionButtonStyle}">
+            <Setter Property="Background" Value="#FEE2E2" />
+            <Setter Property="Foreground" Value="#B91C1C" />
+            <Setter Property="BorderBrush" Value="#FECACA" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FCA5A5" />
+                    <Setter Property="Foreground" Value="#991B1B" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid Background="#FFFFFF">
@@ -142,6 +166,14 @@
                             Click="BtnNextDifference_Click" IsEnabled="False"
                             Style="{StaticResource MiniActionButtonStyle}" Margin="0,0,12,0"
                             ToolTip="Jump to the next block of changed lines" />
+                    <Button x:Name="BtnToolbarRemoveBlock" Content="🗑 Remove Block"
+                            Click="BtnToolbarRemoveBlock_Click" IsEnabled="False"
+                            Style="{StaticResource MiniActionDangerButtonStyle}" Margin="0,0,6,0"
+                            ToolTip="Remove current block of deleted lines from local merged config" />
+                    <Button x:Name="BtnToolbarInsertBlock" Content="⬅️ Insert Block"
+                            Click="BtnToolbarInsertBlock_Click" IsEnabled="False"
+                            Style="{StaticResource MiniActionSuccessButtonStyle}" Margin="0,0,12,0"
+                            ToolTip="Insert or replace current incoming block into local merged config" />
                     <Button x:Name="BtnUndoInsert" Content="↶ Undo"
                             Click="BtnUndoInsert_Click" IsEnabled="False"
                             Style="{StaticResource MiniActionButtonStyle}" Margin="0,0,12,0"
@@ -257,15 +289,20 @@
                                                HorizontalAlignment="Right"
                                                VerticalAlignment="Center" />
                                 </Border>
-                                <!-- Line-by-Line Remove Button (accept incoming deletion) -->
-                                <Button Grid.Column="1"
-                                        Content="🗑 Remove"
-                                        Click="BtnRemoveLine_Click"
-                                        ToolTip="Remove this deleted line from the local merged config (accept the incoming deletion)"
-                                        Style="{StaticResource MiniActionButtonStyle}"
-                                        Margin="4,1,2,1"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding Local.CanRemove, Converter={StaticResource BoolToVisConverter}}" />
+                                <!-- Local Action Buttons (Line-by-Line Remove & Batch Block Remove) -->
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,1,2,1">
+                                    <Button Content="🗑 Remove"
+                                            Click="BtnRemoveLine_Click"
+                                            ToolTip="Remove this deleted line from the local merged config (accept the incoming deletion)"
+                                            Style="{StaticResource MiniActionButtonStyle}"
+                                            Margin="0,0,3,0"
+                                            Visibility="{Binding Local.CanRemove, Converter={StaticResource BoolToVisConverter}}" />
+                                    <Button Content="{Binding Local.BlockButtonText}"
+                                            Click="BtnRemoveBlock_Click"
+                                            ToolTip="{Binding Local.BlockButtonToolTip}"
+                                            Style="{StaticResource MiniActionDangerButtonStyle}"
+                                            Visibility="{Binding Local.CanRemoveBlock, Converter={StaticResource BoolToVisConverter}}" />
+                                </StackPanel>
                                 <!-- Copyable Line Text -->
                                 <TextBox Grid.Column="2"
                                          Text="{Binding Local.Text, Mode=OneWay}"
@@ -306,15 +343,20 @@
                                                HorizontalAlignment="Right"
                                                VerticalAlignment="Center" />
                                 </Border>
-                                <!-- Line-by-Line Insert Button -->
-                                <Button Grid.Column="1"
-                                        Content="⬅️ Insert"
-                                        Click="BtnInsertLine_Click"
-                                        ToolTip="Insert or replace this incoming line into local merged config"
-                                        Style="{StaticResource MiniActionButtonStyle}"
-                                        Margin="4,1,2,1"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding Incoming.CanInsert, Converter={StaticResource BoolToVisConverter}}" />
+                                <!-- Incoming Action Buttons (Line-by-Line Insert & Batch Block Insert) -->
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,1,2,1">
+                                    <Button Content="⬅️ Insert"
+                                            Click="BtnInsertLine_Click"
+                                            ToolTip="Insert or replace this incoming line into local merged config"
+                                            Style="{StaticResource MiniActionButtonStyle}"
+                                            Margin="0,0,3,0"
+                                            Visibility="{Binding Incoming.CanInsert, Converter={StaticResource BoolToVisConverter}}" />
+                                    <Button Content="{Binding Incoming.BlockButtonText}"
+                                            Click="BtnInsertBlock_Click"
+                                            ToolTip="{Binding Incoming.BlockButtonToolTip}"
+                                            Style="{StaticResource MiniActionSuccessButtonStyle}"
+                                            Visibility="{Binding Incoming.CanInsertBlock, Converter={StaticResource BoolToVisConverter}}" />
+                                </StackPanel>
                                 <!-- Copyable Line Text -->
                                 <TextBox Grid.Column="2"
                                          Text="{Binding Incoming.Text, Mode=OneWay}"
