@@ -286,16 +286,16 @@
 
                                     <Button x:Name="UploadProgressButton"
                                             Style="{StaticResource SecondaryButtonStyle}"
-                                            Content="upload_progress"
+                                            Content="upload__progress"
                                             ToolTip="Enable or disable session.upload_progress.enabled in php.ini."
                                             IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
                                             Click="UploadProgressButton_Click"
                                             Padding="16,10" FontSize="13" Margin="0,0,10,0">
                                         <Button.ContextMenu>
                                             <ContextMenu Placement="Bottom" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                                <MenuItem Header="✅ Enable upload_progress"
+                                                <MenuItem Header="✅ Enable upload__progress"
                                                           Command="{Binding EnableUploadProgressCommand}" />
-                                                <MenuItem Header="⛔ Disable upload_progress"
+                                                <MenuItem Header="⛔ Disable upload__progress"
                                                           Command="{Binding DisableUploadProgressCommand}" />
                                             </ContextMenu>
                                         </Button.ContextMenu>
