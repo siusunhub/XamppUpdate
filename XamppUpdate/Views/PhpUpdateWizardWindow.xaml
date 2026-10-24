@@ -259,6 +259,12 @@
                                     <TextBlock Text="{Binding ErrorMessage}" Foreground="#B91C1C" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
                                 </Border>
 
+                                <!-- upload_progress / php.ini Status -->
+                                <Border Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,16"
+                                        Visibility="{Binding UploadProgressStatus, Converter={StaticResource BoolToVisConverter}}">
+                                    <TextBlock Text="{Binding UploadProgressStatus}" Foreground="#15803D" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
+                                </Border>
+
                                 <!-- Fixed-Width Extraction Status Bar (Never resizes the window or parent card) -->
                                 <Border Background="{StaticResource SurfaceBgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,20"
                                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisConverter}}">
@@ -272,6 +278,30 @@
 
                                 <!-- Action Buttons -->
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Style="{StaticResource SecondaryButtonStyle}"
+                                            Content="📝 Open php.ini"
+                                            Command="{Binding OpenPhpIniCommand}"
+                                            ToolTip="Opens the active php.ini in your preferred text editor."
+                                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
+                                            Padding="16,10" FontSize="13" Margin="0,0,10,0" />
+
+                                    <Button x:Name="UploadProgressButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Content="📤 upload_progress"
+                                            ToolTip="Enable or disable session.upload_progress.enabled in php.ini."
+                                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
+                                            Click="UploadProgressButton_Click"
+                                            Padding="16,10" FontSize="13" Margin="0,0,10,0">
+                                        <Button.ContextMenu>
+                                            <ContextMenu Placement="Bottom" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                <MenuItem Header="✅ Enable upload_progress"
+                                                          Command="{Binding EnableUploadProgressCommand}" />
+                                                <MenuItem Header="⛔ Disable upload_progress"
+                                                          Command="{Binding DisableUploadProgressCommand}" />
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
+
                                     <Button Style="{StaticResource PrimaryButtonStyle}"
                                             Content="🔍 Next: Inspect &amp; Compare Configurations →"
                                             Command="{Binding Step1NextCommand}"

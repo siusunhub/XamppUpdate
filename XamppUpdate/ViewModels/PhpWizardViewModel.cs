@@ -134,6 +134,16 @@ namespace XamppUpdate.ViewModels
         private string _errorMessage = string.Empty;
 
         [ObservableProperty]
+        private string _uploadProgressStatus = string.Empty;
+
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(EnableUploadProgressCommand))]
+        [NotifyCanExecuteChangedFor(nameof(DisableUploadProgressCommand))]
+        private bool _isTogglingUploadProgress;
+
+        private bool CanToggleUploadProgress() => !IsTogglingUploadProgress;
+
+        [ObservableProperty]
         private bool _canSkipBackup;
 
         [ObservableProperty]
@@ -234,6 +244,127 @@ namespace XamppUpdate.ViewModels
             catch (Exception ex)
             {
                 ErrorMessage = $"Could not open browser: {ex.Message}";
+            }
+        }
+
+        /// <summary>Returns the php.ini path from settings, falling back to the PHP installation folder.</summary>
+        private string ResolvePhpIniPath()
+        {
+            var settings = _settingsService.CurrentSettings;
+            string[] candidates =
+            {
+                settings.Php.IniPath,
+                Path.Combine(settings.Php.InstallationPath, "php.ini")
+            };
+
+            string? existing = candidates.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c) && File.Exists(c));
+            return existing ?? candidates.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c)) ?? "php.ini";
+        }
+
+        [RelayCommand]
+        public async Task OpenPhpIniAsync()
+        {
+            try
+            {
+                string iniPath = ResolvePhpIniPath();
+                if (!File.Exists(iniPath))
+                {
+                    UploadProgressStatus = string.Empty;
+                    ErrorMessage = $"php.ini not found at '{iniPath}'.";
+                    return;
+                }
+
+                string editor = await Task.Run(ComposerViewModel.ResolveTextEditorExecutable);
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = editor,
+                        Arguments = $"\"{iniPath}\"",
+                        UseShellExecute = true
+                    });
+                }
+                catch
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "notepad.exe",
+                        Arguments = $"\"{iniPath}\"",
+                        UseShellExecute = true
+                    });
+                    editor = "notepad.exe";
+                }
+
+                ErrorMessage = string.Empty;
+                UploadProgressStatus = $"Opened php.ini using {Path.GetFileNameWithoutExtension(editor)}: {iniPath}";
+            }
+            catch (Exception ex)
+            {
+                UploadProgressStatus = string.Empty;
+                ErrorMessage = $"Could not open php.ini: {ex.Message}";
+            }
+        }
+
+        [RelayCommand(CanExecute = nameof(CanToggleUploadProgress))]
+        public async Task EnableUploadProgressAsync()
+        {
+            await SetUploadProgressAsync(true);
+        }
+
+        [RelayCommand(CanExecute = nameof(CanToggleUploadProgress))]
+        public async Task DisableUploadProgressAsync()
+        {
+            await SetUploadProgressAsync(false);
+        }
+
+        public async Task SetUploadProgressAsync(bool enable)
+        {
+            // Serialize Enable/Disable: both menu items disable while one write is in flight.
+            if (IsTogglingUploadProgress) return;
+
+            IsTogglingUploadProgress = true;
+            try
+            {
+                string iniPath = ResolvePhpIniPath();
+                if (!File.Exists(iniPath))
+                {
+                    UploadProgressStatus = string.Empty;
+                    ErrorMessage = $"php.ini not found at '{iniPath}'.";
+                    return;
+                }
+
+                try
+                {
+                    var result = await PhpIniSessionSettings.ApplyAsync(iniPath, enable);
+
+                    string state = enable ? "enabled (= 1)" : "disabled (= 0)";
+                    string detail = result.DirectiveWasCommented
+                        ? (enable
+                            ? " The commented directive was re-enabled."
+                            : " The commented directive was uncommented and set to 0.")
+                        : result.DirectiveWasAppended
+                            ? " The directive was added to php.ini."
+                            : string.Empty;
+
+                    UploadProgressStatus = result.Changed
+                        ? $"session.upload_progress.enabled is now {state}.{detail} Restart Apache for the change to take effect."
+                        : $"session.upload_progress.enabled was already {state}.{detail}";
+                    ErrorMessage = string.Empty;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    UploadProgressStatus = string.Empty;
+                    ErrorMessage = $"Access denied while writing '{iniPath}'. Run {AppInfo.AppName} as administrator and try again.";
+                }
+                catch (Exception ex)
+                {
+                    UploadProgressStatus = string.Empty;
+                    ErrorMessage = $"Could not update upload_progress: {ex.Message}";
+                }
+            }
+            finally
+            {
+                IsTogglingUploadProgress = false;
             }
         }
 
