@@ -2,7 +2,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://microsoft.com/windows)
 [![Target Framework](https://img.shields.io/badge/.NET-10.0%20WPF-purple.svg)](https://dotnet.microsoft.com/)
-[![Version](https://img.shields.io/badge/Version-0.3.0-green.svg)](https://github.com/)
+[![Version](https://img.shields.io/badge/Version-0.5.0-green.svg)](https://github.com/)
 [![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 
 **XAMPP Component Updater** is a modern, reliable Windows desktop utility designed for developers and system administrators to independently upgrade, manage, and maintain individual core components of an existing [XAMPP](https://www.apachefriends.org/) installation.
@@ -27,6 +27,7 @@ Instead of performing disruptive full-suite reinstalls and risking database or v
 - **🐬 MySQL / MariaDB Database Server Update Wizard**
   - In-place binary engine updates while strictly safeguarding the `data/` directory and `my.ini`.
   - Service management with graceful stop/start and health validation.
+  - Safe folder rotation to timestamped backups (`mysql_old_{timestamp}`) retained on disk with exponential backoff retry handling.
   - Detects and triggers post-upgrade maintenance scripts (`mysql_upgrade` / MariaDB upgrade utilities).
 
 - **📑 phpMyAdmin Web Interface Wizard**
@@ -41,9 +42,9 @@ Instead of performing disruptive full-suite reinstalls and risking database or v
 - **📦 Composer Dependency Manager**
   - Real-time Composer executable version detection and health status.
   - Run `composer self-update` directly from the dashboard.
-  - Inspect outdated packages (`composer outdated`) in configured projects.
+  - Inspect outdated packages (`composer outdated --all`) with intelligent log scanning and real-time **"Update Available"** status badge.
   - Trigger package updates (`composer update` / `--with-all-dependencies`).
-  - Automated timestamped `vendor/` folder backups before destructive operations.
+  - Automated timestamped `vendor/` folder backups (`vendor_old_{timestamp}`) permanently preserved before deployment.
   - Deploy and sync packages to web targets (`htdocs`) with **Test Mode (Dry Run)** safety validation.
 
 - **🛡️ Enterprise-Grade Safety & Reliability**

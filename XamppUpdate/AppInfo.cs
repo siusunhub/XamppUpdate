@@ -9,8 +9,8 @@ namespace XamppUpdate
     {
         public const string AppName = "XAMPP Component Updater";
 
-        public static string Version { get; } = ResolveMetadata("BuildVersion", "0.4");
-        public static string BuildNumber { get; } = ResolveMetadata("BuildNumber", "0.4");
+        public static string Version { get; } = ResolveMetadata("BuildVersion", "0.5");
+        public static string BuildNumber { get; } = ResolveMetadata("BuildNumber", "0.5");
         public static string BuildDate { get; } = ResolveBuildDate();
 
         public static string WindowTitle => $"{AppName} v{Version} (Build {BuildNumber} · {BuildDate})";

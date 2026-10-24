@@ -421,9 +421,10 @@ namespace XamppUpdate.Services
             return ("cmd.exe", $"/c \"composer {composerArgs}\"");
         }
 
-        public static string GetAvailableOldVendorDirectoryPath(string wwwTargetDirectory)
+        public static string GetAvailableOldVendorDirectoryPath(string wwwTargetDirectory, string? timestamp = null)
         {
-            string candidate = Path.Combine(wwwTargetDirectory, "vendor_old");
+            string ts = !string.IsNullOrWhiteSpace(timestamp) ? timestamp : DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string candidate = Path.Combine(wwwTargetDirectory, $"vendor_old_{ts}");
             if (!Directory.Exists(candidate))
             {
                 return candidate;
@@ -432,7 +433,7 @@ namespace XamppUpdate.Services
             int index = 1;
             while (true)
             {
-                string indexedCandidate = Path.Combine(wwwTargetDirectory, $"vendor_old{index}");
+                string indexedCandidate = Path.Combine(wwwTargetDirectory, $"vendor_old_{ts}_{index}");
                 if (!Directory.Exists(indexedCandidate))
                 {
                     return indexedCandidate;

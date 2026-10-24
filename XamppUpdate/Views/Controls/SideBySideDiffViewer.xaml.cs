@@ -406,6 +406,32 @@ namespace XamppUpdate.Views.Controls
             ShowNotice("✓ Inserted incoming line into merged config");
         }
 
+        private void BtnRemoveLine_Click(object sender, RoutedEventArgs e)
+        {
+            if (DiffItem == null) return;
+            if (sender is not Button btn || btn.DataContext is not DiffRowModel row) return;
+            if (!row.Local.CanRemove || row.Local.LineNumber is not int lineNumber) return;
+
+            var localLines = new List<string>(NormalizeLines(DiffItem.MergedContent));
+            int targetLineIndex = lineNumber - 1;
+            if (targetLineIndex < 0 || targetLineIndex >= localLines.Count) return;
+
+            SetNavigationPosition(row);
+            _insertUndo.Push(new InsertUndoState(DiffItem.MergedContent, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
+            BtnUndoInsert.IsEnabled = true;
+
+            localLines.RemoveAt(targetLineIndex);
+
+            DiffItem.MergedContent = string.Join(Environment.NewLine, localLines);
+            DiffItem.Resolution = ConfigFileResolution.UseMerged;
+            DiffItem.IsCustomMerged = true;
+
+            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
+            TxtDirectEditor.Text = DiffItem.MergedContent;
+
+            ShowNotice("✓ Removed deleted line from merged config");
+        }
+
         private void BtnApplyDirectEdit_Click(object sender, RoutedEventArgs e)
         {
             if (DiffItem == null) return;
@@ -463,7 +489,7 @@ namespace XamppUpdate.Views.Controls
             _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
             TxtDirectEditor.Text = DiffItem.MergedContent;
             BtnUndoInsert.IsEnabled = _insertUndo.Count > 0;
-            ShowNotice("✓ Undid last incoming line insertion");
+            ShowNotice("✓ Undid last line change");
         }
 
         private void BtnCopyEditorText_Click(object sender, RoutedEventArgs e)

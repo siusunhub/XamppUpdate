@@ -574,7 +574,7 @@ namespace XamppUpdate.ViewModels
                 "Are you sure you want to proceed with the REAL MySQL Update?\n\n" +
                 "• Apache and MySQL services will be stopped.\n" +
                 "• Existing MySQL binaries & config and live database data will be backed up into 2 separate .zip archives (mysql_backup and mysql_data_backup).\n" +
-                "• Existing MySQL directory will be renamed to mysql_old.\n" +
+                "• Existing MySQL directory will be renamed to mysql_old_{timestamp}.\n" +
                 "• New MySQL binaries will be installed, my.ini applied, and data folder migrated.\n" +
                 "• MySQL and Apache services will be restarted.\n\n" +
                 "Do you want to proceed?",

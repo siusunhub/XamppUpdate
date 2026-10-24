@@ -489,7 +489,7 @@
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="✓ 1. Stop Apache &amp; MySQL Windows Services" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
                                 <TextBlock Text="✓ 2. Automated Dual Zip Backup (mysql_backup &amp; mysql_data_backup)" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
-                                <TextBlock Text="✓ 3. Rename MySQL folder (mysql_old) &amp; Deploy New Binaries" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
+                                <TextBlock Text="✓ 3. Rename MySQL folder (mysql_old_{timestamp}) &amp; Deploy New Binaries" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />
                             </StackPanel>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="✓ 4. Apply configured my.ini configuration" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2" />

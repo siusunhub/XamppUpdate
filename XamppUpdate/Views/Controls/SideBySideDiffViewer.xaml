@@ -142,10 +142,10 @@
                             Click="BtnNextDifference_Click" IsEnabled="False"
                             Style="{StaticResource MiniActionButtonStyle}" Margin="0,0,12,0"
                             ToolTip="Jump to the next block of changed lines" />
-                    <Button x:Name="BtnUndoInsert" Content="↶ Undo Insert"
+                    <Button x:Name="BtnUndoInsert" Content="↶ Undo"
                             Click="BtnUndoInsert_Click" IsEnabled="False"
                             Style="{StaticResource MiniActionButtonStyle}" Margin="0,0,12,0"
-                            ToolTip="Undo the last Insert click for this file" />
+                            ToolTip="Undo the last Insert or Remove click for this file" />
                     <TextBlock x:Name="TxtDifferencePosition" Text="No differences"
                                VerticalAlignment="Center" Foreground="#64748B" FontSize="11" />
                 </WrapPanel>
@@ -245,6 +245,7 @@
                             <Grid Grid.Column="0" Background="{Binding Local.Type, Converter={StaticResource DiffBgConverter}}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="38" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <!-- Line Number -->
@@ -256,8 +257,17 @@
                                                HorizontalAlignment="Right"
                                                VerticalAlignment="Center" />
                                 </Border>
+                                <!-- Line-by-Line Remove Button (accept incoming deletion) -->
+                                <Button Grid.Column="1"
+                                        Content="🗑 Remove"
+                                        Click="BtnRemoveLine_Click"
+                                        ToolTip="Remove this deleted line from the local merged config (accept the incoming deletion)"
+                                        Style="{StaticResource MiniActionButtonStyle}"
+                                        Margin="4,1,2,1"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding Local.CanRemove, Converter={StaticResource BoolToVisConverter}}" />
                                 <!-- Copyable Line Text -->
-                                <TextBox Grid.Column="1"
+                                <TextBox Grid.Column="2"
                                          Text="{Binding Local.Text, Mode=OneWay}"
                                          ToolTip="{Binding Local.Text}"
                                          FontFamily="Consolas, Cascadia Code, Courier New"

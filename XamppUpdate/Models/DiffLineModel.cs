@@ -8,6 +8,7 @@ namespace XamppUpdate.Models
 
         public string DisplayLineNumber => LineNumber.HasValue ? LineNumber.Value.ToString() : string.Empty;
         public bool CanInsert => Type == DiffLineType.Inserted || Type == DiffLineType.Modified;
+        public bool CanRemove => Type == DiffLineType.Deleted;
         public bool HasText => !string.IsNullOrEmpty(Text);
         public bool IsPlaceholder => Type == DiffLineType.EmptyPlaceholder;
     }

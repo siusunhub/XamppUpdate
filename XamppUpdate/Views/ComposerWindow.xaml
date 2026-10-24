@@ -102,7 +102,21 @@
                     <StackPanel Grid.Row="0">
                         <TextBlock Text="2. Check All Packages" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" />
                         <TextBlock Text="Runs 'composer outdated --all' in Download Target to inspect all installed and latest versions."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,12" />
+                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,8" />
+                        <Border Background="{StaticResource DangerBgBrush}"
+                                BorderBrush="{StaticResource DangerBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="8,3"
+                                HorizontalAlignment="Left"
+                                Margin="0,0,0,10"
+                                ToolTip="One or more package updates or major releases are available."
+                                Visibility="{Binding HasPackageUpdates, Converter={StaticResource BoolToVisConverter}}">
+                            <TextBlock Text="Update Available"
+                                       Foreground="{StaticResource DangerFgBrush}"
+                                       FontSize="11"
+                                       FontWeight="Bold" />
+                        </Border>
                     </StackPanel>
 
                     <Button Grid.Row="2" Style="{StaticResource PrimaryButtonStyle}"

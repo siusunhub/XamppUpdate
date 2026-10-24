@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -50,6 +51,9 @@ namespace XamppUpdate.ViewModels
             get => IsWithAllDependencies;
             set => IsWithAllDependencies = value;
         }
+
+        [ObservableProperty]
+        private bool _hasPackageUpdates;
 
         [ObservableProperty]
         private string _statusMessage = "Ready.";
@@ -335,8 +339,22 @@ namespace XamppUpdate.ViewModels
                 ? DownloadTargetPath
                 : WwwTargetPath;
 
+            HasPackageUpdates = false;
             PrepareExecution($"Inspect All Packages & Versions (composer outdated --all in {targetDir})");
-            var progress = CreateProgressReporter();
+            var progress = CreateProgressReporter(line =>
+            {
+                if (IsPackageUpdateLine(line))
+                {
+                    if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.CheckAccess())
+                    {
+                        Application.Current.Dispatcher.Invoke(() => HasPackageUpdates = true);
+                    }
+                    else
+                    {
+                        HasPackageUpdates = true;
+                    }
+                }
+            });
 
             try
             {
@@ -393,6 +411,7 @@ namespace XamppUpdate.ViewModels
 
                 if (success)
                 {
+                    HasPackageUpdates = false;
                     StatusMessage = IsWithAllDependencies
                         ? "Packages and all sub-dependencies updated successfully!"
                         : "Packages downloaded and updated successfully in Download Target Directory!";
@@ -423,7 +442,7 @@ namespace XamppUpdate.ViewModels
                 bool confirmed = ConfirmAction(
                     "Are you sure you want to proceed with the REAL Backup & Deploy to WWW?\n\n" +
                     "• Existing WWW vendor directory will be backed up to a .zip archive.\n" +
-                    "• Existing vendor folder will be renamed to vendor_old.\n" +
+                    "• Existing vendor folder will be renamed to vendor_old_{timestamp}.\n" +
                     "• Updated vendor packages will be copied to your live WWW directory.\n\n" +
                     "Do you want to proceed?",
                     "Confirm Real Vendor Deployment");
@@ -557,12 +576,13 @@ namespace XamppUpdate.ViewModels
             RequestClose?.Invoke();
         }
 
-        private IProgress<string> CreateProgressReporter()
+        private IProgress<string> CreateProgressReporter(Action<string>? onLineReceived = null)
         {
             return new Progress<string>(line =>
             {
                 if (!string.IsNullOrWhiteSpace(line))
                 {
+                    onLineReceived?.Invoke(line);
                     string entry = $"[{DateTime.Now:HH:mm:ss}] {line}";
                     if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.CheckAccess())
                     {
@@ -574,6 +594,61 @@ namespace XamppUpdate.ViewModels
                     }
                 }
             });
+        }
+
+        public static bool IsPackageUpdateLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) return false;
+
+            string trimmed = line.Trim();
+            if (trimmed.StartsWith("Color legend", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("Legend", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("---") ||
+                trimmed.StartsWith("==="))
+            {
+                return false;
+            }
+
+            // 1. Line has package pattern (vendor/name) AND an update symbol (! or ~ or !=)
+            // e.g. "vendor/package 1.2.3 ! 1.2.5" or "vendor/package 1.2.3 ~ 2.0.0" or "vendor/package 1.2.3 != 1.2.5"
+            var symMatch = Regex.Match(trimmed, @"\b([vV]?\d[\w\.\-+]*)\s+([!~]|!=)\s+([vV]?\d[\w\.\-+]*)");
+            if (symMatch.Success)
+            {
+                return true;
+            }
+
+            // 2. Line has package pattern and explicitly mentions release/update availability
+            if (Regex.IsMatch(trimmed, @"^[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+"))
+            {
+                if (trimmed.Contains("major release available", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Contains("update available", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Contains("new release available", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Contains("new version available", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                // Check for two differing versions without explicit symbols (e.g. "vendor/package 1.2.3 1.2.5")
+                var verMatch = Regex.Match(trimmed, @"^[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+\s+([vV]?\d[\w\.\-+]*)\s+(?:(!|~|!=)\s+)?([vV]?\d[\w\.\-+]*)");
+                if (verMatch.Success)
+                {
+                    string v1 = verMatch.Groups[1].Value.TrimStart('v', 'V');
+                    string v2 = verMatch.Groups[3].Value.TrimStart('v', 'V');
+                    if (!string.IsNullOrEmpty(v2) && !string.Equals(v1, v2, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // 3. Fallback: if line contains "~ major release available" or "! update available"
+            if (trimmed.Contains("~ major release available", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Contains("! update available", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }

@@ -706,7 +706,7 @@ namespace XamppUpdate.Services
             }
 
                 // ==========================================
-                // STEP 3: Rename MySQL folder (mysql_old, mysql_old1, ...)
+                // STEP 3: Rename MySQL folder (mysql_old_{timestamp}, ...)
                 // ==========================================
                 // Ensure no background mysqld.exe / mariadbd.exe processes or open handles before renaming
                 if (!isTestMode)
@@ -1128,13 +1128,14 @@ namespace XamppUpdate.Services
             catch { }
         }
 
-        public static string GetAvailableOldDirectoryPath(string currentDirectoryPath)
+        public static string GetAvailableOldDirectoryPath(string currentDirectoryPath, string? timestamp = null)
         {
             string? parent = Path.GetDirectoryName(currentDirectoryPath);
             if (string.IsNullOrEmpty(parent)) parent = Directory.GetCurrentDirectory();
 
             string dirName = Path.GetFileName(currentDirectoryPath);
-            string candidate = Path.Combine(parent, $"{dirName}_old");
+            string ts = !string.IsNullOrWhiteSpace(timestamp) ? timestamp : DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string candidate = Path.Combine(parent, $"{dirName}_old_{ts}");
             if (!Directory.Exists(candidate))
             {
                 return candidate;
@@ -1143,7 +1144,7 @@ namespace XamppUpdate.Services
             int index = 1;
             while (true)
             {
-                string indexedCandidate = Path.Combine(parent, $"{dirName}_old{index}");
+                string indexedCandidate = Path.Combine(parent, $"{dirName}_old_{ts}_{index}");
                 if (!Directory.Exists(indexedCandidate))
                 {
                     return indexedCandidate;
