@@ -9,6 +9,8 @@
 
 Instead of performing disruptive full-suite reinstalls and risking database or vhost corruption, **XamppUpdate** allows you to update **Apache**, **PHP**, **MySQL / MariaDB**, and **phpMyAdmin** in-place—automatically preserving your configuration files, backing up existing installations, offering side-by-side config diffs, and managing Windows services gracefully.
 
+![XAMPP Component Updater Screenshot](screenshot.png)
+
 ---
 
 ## 🚀 Key Features
