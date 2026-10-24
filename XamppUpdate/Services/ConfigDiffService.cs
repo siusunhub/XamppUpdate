@@ -309,6 +309,8 @@ namespace XamppUpdate.Services
                 }
             }
 
+            AnnotateDifferenceBlocks(rowList);
+
             item.LocalLines = localList;
             item.IncomingLines = incomingList;
             item.DiffRows = rowList;
@@ -316,6 +318,101 @@ namespace XamppUpdate.Services
             item.DeletionsCount = dels;
             item.ModificationsCount = mods;
             item.HasDifferences = (adds > 0 || dels > 0 || mods > 0 || item.LocalExists != item.IncomingExists);
+        }
+
+        public static void AnnotateDifferenceBlocks(List<DiffRowModel> rowList)
+        {
+            if (rowList == null || rowList.Count == 0) return;
+
+            int i = 0;
+            while (i < rowList.Count)
+            {
+                var row = rowList[i];
+                if (!IsRowDifferent(row))
+                {
+                    row.Local.CanRemoveBlock = false;
+                    row.Local.BlockButtonText = string.Empty;
+                    row.Local.BlockButtonToolTip = string.Empty;
+                    row.Local.BlockLineCount = 0;
+
+                    row.Incoming.CanInsertBlock = false;
+                    row.Incoming.BlockButtonText = string.Empty;
+                    row.Incoming.BlockButtonToolTip = string.Empty;
+                    row.Incoming.BlockLineCount = 0;
+                    i++;
+                    continue;
+                }
+
+                int start = i;
+                while (i < rowList.Count && IsRowDifferent(rowList[i]))
+                {
+                    i++;
+                }
+                int end = i - 1;
+
+                int insertableCount = 0;
+                int removableCount = 0;
+                int localLinesCount = 0;
+
+                for (int j = start; j <= end; j++)
+                {
+                    if (rowList[j].Incoming.CanInsert) insertableCount++;
+                    if (rowList[j].Local.CanRemove) removableCount++;
+                    if (rowList[j].Local.LineNumber.HasValue && rowList[j].Local.Type != DiffLineType.EmptyPlaceholder)
+                        localLinesCount++;
+                }
+
+                bool canInsertBlock = insertableCount > 1;
+                bool canRemoveBlock = removableCount > 1;
+
+                string insertText = $"⬅️ Block ({insertableCount})";
+                string insertToolTip = localLinesCount > 0
+                    ? $"Replace local block ({localLinesCount} lines) with incoming block ({insertableCount} lines)"
+                    : $"Insert incoming block ({insertableCount} lines) into local merged config";
+
+                string removeText = $"🗑 Block ({removableCount})";
+                string removeToolTip = $"Remove entire deleted block ({removableCount} lines) from local merged config";
+
+                for (int j = start; j <= end; j++)
+                {
+                    var r = rowList[j];
+                    if (canInsertBlock && r.Incoming.CanInsert)
+                    {
+                        r.Incoming.CanInsertBlock = true;
+                        r.Incoming.BlockLineCount = insertableCount;
+                        r.Incoming.BlockButtonText = insertText;
+                        r.Incoming.BlockButtonToolTip = insertToolTip;
+                    }
+                    else
+                    {
+                        r.Incoming.CanInsertBlock = false;
+                        r.Incoming.BlockLineCount = 0;
+                        r.Incoming.BlockButtonText = string.Empty;
+                        r.Incoming.BlockButtonToolTip = string.Empty;
+                    }
+
+                    if (canRemoveBlock && r.Local.CanRemove)
+                    {
+                        r.Local.CanRemoveBlock = true;
+                        r.Local.BlockLineCount = removableCount;
+                        r.Local.BlockButtonText = removeText;
+                        r.Local.BlockButtonToolTip = removeToolTip;
+                    }
+                    else
+                    {
+                        r.Local.CanRemoveBlock = false;
+                        r.Local.BlockLineCount = 0;
+                        r.Local.BlockButtonText = string.Empty;
+                        r.Local.BlockButtonToolTip = string.Empty;
+                    }
+                }
+            }
+        }
+
+        private static bool IsRowDifferent(DiffRowModel row)
+        {
+            return row.Local.Type is DiffLineType.Inserted or DiffLineType.Deleted or DiffLineType.Modified
+                || row.Incoming.Type is DiffLineType.Inserted or DiffLineType.Deleted or DiffLineType.Modified;
         }
 
         private static void AddRow(
