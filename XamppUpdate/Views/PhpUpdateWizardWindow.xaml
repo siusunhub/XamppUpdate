@@ -281,13 +281,12 @@
                                     <Button Style="{StaticResource SecondaryButtonStyle}"
                                             Content="📝 Open php.ini"
                                             Command="{Binding OpenPhpIniCommand}"
-                                            ToolTip="Opens the active php.ini in your preferred text editor."
                                             IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
                                             Padding="16,10" FontSize="13" Margin="0,0,10,0" />
 
                                     <Button x:Name="UploadProgressButton"
                                             Style="{StaticResource SecondaryButtonStyle}"
-                                            Content="📤 upload_progress"
+                                            Content="upload_progress"
                                             ToolTip="Enable or disable session.upload_progress.enabled in php.ini."
                                             IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
                                             Click="UploadProgressButton_Click"
