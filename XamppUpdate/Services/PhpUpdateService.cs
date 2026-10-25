@@ -380,6 +380,10 @@ namespace XamppUpdate.Services
                                 Directory.CreateDirectory(dir);
                             }
                             File.Copy(sourceFile, destFile, true);
+                            if (FileEncodingHelper.IsConfigFile(destFile))
+                            {
+                                FileEncodingHelper.StripBomFromFile(destFile);
+                            }
                         }
                         else
                         {
@@ -437,6 +441,7 @@ namespace XamppUpdate.Services
                             if (!isTestMode)
                             {
                                 File.Copy(phpIniDiff.IncomingFilePath, targetPhpIni, true);
+                                FileEncodingHelper.StripBomFromFile(targetPhpIni);
                             }
                         }
                     }

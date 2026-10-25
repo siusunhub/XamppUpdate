@@ -445,7 +445,11 @@ namespace XamppUpdate.Services
             {
                 Index = rowIndex,
                 Local = localModel,
-                Incoming = incomingModel
+                Incoming = incomingModel,
+                OriginalLocalText = localModel.Text,
+                OriginalLocalType = localType,
+                OriginalIncomingType = incomingType,
+                OriginalLocalLineNumber = localModel.LineNumber
             });
         }
 

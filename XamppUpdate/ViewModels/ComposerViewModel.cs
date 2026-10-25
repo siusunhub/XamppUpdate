@@ -600,52 +600,61 @@ namespace XamppUpdate.ViewModels
         {
             if (string.IsNullOrWhiteSpace(line)) return false;
 
-            string trimmed = line.Trim();
+            // Strip ANSI escape codes if present
+            string trimmed = Regex.Replace(line, @"\x1B\[[^@-~]*[a-zA-Z]", "").Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)) return false;
+
+            // Ignore headers, legends, dividers, or system notices
             if (trimmed.StartsWith("Color legend", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.StartsWith("Legend", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("Direct dependencies", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("Transitive dependencies", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("Package ", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.StartsWith("---") ||
-                trimmed.StartsWith("==="))
+                trimmed.StartsWith("===") ||
+                trimmed.StartsWith("***"))
             {
                 return false;
             }
 
-            // 1. Line has package pattern (vendor/name) AND an update symbol (! or ~ or !=)
-            // e.g. "vendor/package 1.2.3 ! 1.2.5" or "vendor/package 1.2.3 ~ 2.0.0" or "vendor/package 1.2.3 != 1.2.5"
-            var symMatch = Regex.Match(trimmed, @"\b([vV]?\d[\w\.\-+]*)\s+([!~]|!=)\s+([vV]?\d[\w\.\-+]*)");
-            if (symMatch.Success)
+            // Legend item lines start with !, ~, or = followed by explanation words (e.g. "~ major release available - update possible")
+            // A valid composer package line ALWAYS starts with a vendor/package name (e.g., "phpmailer/phpmailer")
+            if (!Regex.IsMatch(trimmed, @"^[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+\s+"))
             {
-                return true;
+                return false;
             }
 
-            // 2. Line has package pattern and explicitly mentions release/update availability
-            if (Regex.IsMatch(trimmed, @"^[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+"))
+            // Standard composer outdated format:
+            // "vendor/package <current_version> [<symbol>] <latest_version> ..."
+            // where symbol can be:
+            //   !  (patch or minor release available - update recommended)
+            //   ~  (major release available - update possible)
+            //   != (version mismatch)
+            //   =  (up to date version)
+            var match = Regex.Match(trimmed, @"^[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+\s+([vV]?\d[\w\.\-+]*|\S+)\s+(?:([!~=]|!=)\s+)?([vV]?\d[\w\.\-+]*|\S+)");
+            if (match.Success)
             {
-                if (trimmed.Contains("major release available", StringComparison.OrdinalIgnoreCase) ||
-                    trimmed.Contains("update available", StringComparison.OrdinalIgnoreCase) ||
-                    trimmed.Contains("new release available", StringComparison.OrdinalIgnoreCase) ||
-                    trimmed.Contains("new version available", StringComparison.OrdinalIgnoreCase))
+                string symbol = match.Groups[2].Value.Trim();
+                string vCurrent = match.Groups[1].Value.TrimStart('v', 'V');
+                string vLatest = match.Groups[3].Value.TrimStart('v', 'V');
+
+                // If symbol is explicitly '=' (up to date), it is NOT an update
+                if (symbol == "=")
+                {
+                    return false;
+                }
+
+                // If symbol is '!', '~', or '!=', it is an update
+                if (symbol == "!" || symbol == "~" || symbol == "!=")
                 {
                     return true;
                 }
 
-                // Check for two differing versions without explicit symbols (e.g. "vendor/package 1.2.3 1.2.5")
-                var verMatch = Regex.Match(trimmed, @"^[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+\s+([vV]?\d[\w\.\-+]*)\s+(?:(!|~|!=)\s+)?([vV]?\d[\w\.\-+]*)");
-                if (verMatch.Success)
+                // If no symbol was present, check if versions differ
+                if (!string.IsNullOrEmpty(vLatest) && !string.Equals(vCurrent, vLatest, StringComparison.OrdinalIgnoreCase))
                 {
-                    string v1 = verMatch.Groups[1].Value.TrimStart('v', 'V');
-                    string v2 = verMatch.Groups[3].Value.TrimStart('v', 'V');
-                    if (!string.IsNullOrEmpty(v2) && !string.Equals(v1, v2, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
+                    return true;
                 }
-            }
-
-            // 3. Fallback: if line contains "~ major release available" or "! update available"
-            if (trimmed.Contains("~ major release available", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.Contains("! update available", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
             }
 
             return false;

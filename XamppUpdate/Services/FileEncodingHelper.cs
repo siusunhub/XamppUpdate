@@ -227,7 +227,109 @@ namespace XamppUpdate.Services
         }
 
         /// <summary>
+        /// <summary>
+        /// Checks whether a file path points to a server configuration file (Apache, PHP, MySQL, phpMyAdmin, Composer).
+        /// </summary>
+        public static bool IsConfigFile(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) return false;
+            string ext = Path.GetExtension(filePath).ToLowerInvariant();
+            string name = Path.GetFileName(filePath).ToLowerInvariant();
+            return ext is ".conf" or ".ini" or ".cnf" or ".php" or ".inc" or ".json"
+                || name is ".htaccess" or "httpd.conf" or "my.ini" or "php.ini" or "config.inc.php" or "composer.json";
+        }
+
+        /// <summary>
+        /// Ensures the encoding NEVER emits a Byte Order Mark (BOM).
+        /// Apache (httpd.conf), PHP (php.ini, .php), and MySQL (my.ini) configuration parsers fail or corrupt
+        /// if a UTF-8 BOM is present.
+        /// </summary>
+        public static Encoding EnsureNoBom(Encoding? encoding)
+        {
+            if (encoding == null || encoding is UTF8Encoding || encoding.CodePage == 65001)
+            {
+                return Utf8NoBom;
+            }
+
+            // If any encoding emits a preamble (such as UTF-16/32 with BOM), force UTF-8 without BOM
+            // as server config files cannot parse multi-byte BOMs.
+            if (encoding.GetPreamble().Length > 0)
+            {
+                return Utf8NoBom;
+            }
+
+            return encoding;
+        }
+
+        /// <summary>
+        /// Strips any leading Unicode Byte Order Mark ('\uFEFF') from a text string.
+        /// </summary>
+        public static string StripLeadingBom(string content)
+        {
+            if (string.IsNullOrEmpty(content)) return content;
+            return content.TrimStart('\uFEFF');
+        }
+
+        /// <summary>
+        /// Reads text from a byte span, explicitly skipping UTF-8 BOM bytes (0xEF, 0xBB, 0xBF)
+        /// and stripping any leading '\uFEFF' character to guarantee clean configuration content.
+        /// </summary>
+        public static string ReadTextWithoutBom(ReadOnlySpan<byte> bytes, Encoding encoding)
+        {
+            if (bytes.Length == 0) return string.Empty;
+
+            // If bytes start with UTF-8 BOM (0xEF, 0xBB, 0xBF), skip the 3 bytes
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            {
+                bytes = bytes.Slice(3);
+                encoding = Utf8NoBom;
+            }
+
+            string text = encoding.GetString(bytes);
+            return StripLeadingBom(text);
+        }
+
+        /// <summary>
+        /// Checks a physical file on disk and removes any UTF-8 BOM (0xEF, 0xBB, 0xBF) if present.
+        /// </summary>
+        public static void StripBomFromFile(string filePath)
+        {
+            if (!File.Exists(filePath)) return;
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(filePath);
+                if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+                {
+                    byte[] stripped = new byte[bytes.Length - 3];
+                    Buffer.BlockCopy(bytes, 3, stripped, 0, stripped.Length);
+                    File.WriteAllBytes(filePath, stripped);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Asynchronously checks a physical file on disk and removes any UTF-8 BOM (0xEF, 0xBB, 0xBF) if present.
+        /// </summary>
+        public static async Task StripBomFromFileAsync(string filePath, CancellationToken cancellationToken = default)
+        {
+            if (!File.Exists(filePath)) return;
+            try
+            {
+                byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+                if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+                {
+                    byte[] stripped = new byte[bytes.Length - 3];
+                    Buffer.BlockCopy(bytes, 3, stripped, 0, stripped.Length);
+                    await File.WriteAllBytesAsync(filePath, stripped, cancellationToken);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// Detects both encoding and newline style of an existing file.
+        /// Always ensures the returned encoding does NOT emit a BOM.
         /// </summary>
         public static (Encoding Encoding, string NewLine) DetectEncodingAndNewLine(string filePath)
         {
@@ -239,8 +341,9 @@ namespace XamppUpdate.Services
             try
             {
                 byte[] bytes = File.ReadAllBytes(filePath);
-                var encoding = DetectEncoding(bytes);
-                string text = encoding.GetString(bytes);
+                var rawEncoding = DetectEncoding(bytes);
+                var encoding = EnsureNoBom(rawEncoding);
+                string text = ReadTextWithoutBom(bytes, rawEncoding);
                 string newLine = DetectNewLine(text);
                 return (encoding, newLine);
             }
@@ -251,59 +354,57 @@ namespace XamppUpdate.Services
         }
 
         /// <summary>
-        /// Reads all text from a file, detecting its encoding automatically.
+        /// Reads all text from a file, detecting its encoding automatically and stripping any BOM.
         /// </summary>
         public static async Task<string> ReadAllTextAsync(string filePath, CancellationToken cancellationToken = default)
         {
             if (!File.Exists(filePath)) return string.Empty;
             byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
             var encoding = DetectEncoding(bytes);
-            return encoding.GetString(bytes);
+            return ReadTextWithoutBom(bytes, encoding);
         }
 
         /// <summary>
-        /// Reads all text from a file synchronously, detecting its encoding automatically.
+        /// Reads all text from a file synchronously, detecting its encoding automatically and stripping any BOM.
         /// </summary>
         public static string ReadAllText(string filePath)
         {
             if (!File.Exists(filePath)) return string.Empty;
             byte[] bytes = File.ReadAllBytes(filePath);
             var encoding = DetectEncoding(bytes);
-            return encoding.GetString(bytes);
+            return ReadTextWithoutBom(bytes, encoding);
         }
 
         /// <summary>
-        /// Reads all lines from a file, detecting its encoding automatically.
+        /// Reads all lines from a file, detecting its encoding automatically and stripping any BOM.
         /// </summary>
         public static async Task<string[]> ReadAllLinesAsync(string filePath, Encoding? encoding = null, CancellationToken cancellationToken = default)
         {
             if (!File.Exists(filePath)) return Array.Empty<string>();
-            if (encoding == null)
+            byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+            encoding ??= DetectEncoding(bytes);
+            string text = ReadTextWithoutBom(bytes, encoding);
+            var list = new List<string>();
+            using var reader = new StringReader(text);
+            string? line;
+            while ((line = reader.ReadLine()) != null)
             {
-                byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
-                encoding = DetectEncoding(bytes);
-                string text = encoding.GetString(bytes);
-                var list = new List<string>();
-                using var reader = new StringReader(text);
-                string? line;
-                while ((line = reader.ReadLine()) != null)
-                {
-                    list.Add(line);
-                }
-                return list.ToArray();
+                list.Add(line);
             }
-
-            return await File.ReadAllLinesAsync(filePath, encoding, cancellationToken);
+            return list.ToArray();
         }
 
         /// <summary>
-        /// Writes all text to a file, preserving the original file's encoding and line endings if it already exists.
-        /// If the file does not exist, defaults to UTF-8 without BOM.
-        /// Performs atomic replacement via a temporary file.
+        /// Writes all text to a file, preserving the original file's newline style and non-BOM encoding.
+        /// If the file is UTF-8 (with or without BOM) or new, it will ALWAYS be written in UTF-8 WITHOUT BOM
+        /// to ensure Apache, PHP, and MySQL configuration parsers never encounter corrupting BOM bytes.
+        /// Performs atomic replacement via a temporary file with post-write BOM verification.
         /// </summary>
         public static async Task WriteAllTextPreservingEncodingAsync(string filePath, string content, CancellationToken cancellationToken = default)
         {
             var (encoding, newLine) = DetectEncodingAndNewLine(filePath);
+            encoding = EnsureNoBom(encoding);
+            content = StripLeadingBom(content);
             content = NormalizeNewLines(content, newLine);
 
             string dir = Path.GetDirectoryName(filePath) ?? AppDomain.CurrentDomain.BaseDirectory;
@@ -314,15 +415,22 @@ namespace XamppUpdate.Services
 
             string tempFile = Path.Combine(dir, $"{Path.GetFileName(filePath)}.{Guid.NewGuid():N}.tmp");
             await File.WriteAllTextAsync(tempFile, content, encoding, cancellationToken);
+
+            // Double check: ensure no BOM byte sequence (0xEF, 0xBB, 0xBF) exists
+            await StripBomFromFileAsync(tempFile, cancellationToken);
+
             File.Move(tempFile, filePath, overwrite: true);
         }
 
         /// <summary>
-        /// Synchronously writes text preserving existing encoding and line endings.
+        /// Synchronously writes text preserving existing newline style and non-BOM encoding.
+        /// Guarantees that UTF-8 BOM is never written.
         /// </summary>
         public static void WriteAllTextPreservingEncoding(string filePath, string content)
         {
             var (encoding, newLine) = DetectEncodingAndNewLine(filePath);
+            encoding = EnsureNoBom(encoding);
+            content = StripLeadingBom(content);
             content = NormalizeNewLines(content, newLine);
 
             string dir = Path.GetDirectoryName(filePath) ?? AppDomain.CurrentDomain.BaseDirectory;
@@ -333,18 +441,29 @@ namespace XamppUpdate.Services
 
             string tempFile = Path.Combine(dir, $"{Path.GetFileName(filePath)}.{Guid.NewGuid():N}.tmp");
             File.WriteAllText(tempFile, content, encoding);
+
+            // Double check: ensure no BOM byte sequence (0xEF, 0xBB, 0xBF) exists
+            StripBomFromFile(tempFile);
+
             File.Move(tempFile, filePath, overwrite: true);
         }
 
         /// <summary>
-        /// Writes lines to a file with specified encoding and newline, atomically.
+        /// Writes lines to a file with specified encoding and newline atomically.
+        /// Guarantees that UTF-8 BOM is never written.
         /// </summary>
         public static async Task WriteAllLinesAsync(string filePath, IEnumerable<string> lines, Encoding? encoding = null, string? newLine = null, CancellationToken cancellationToken = default)
         {
-            encoding ??= Utf8NoBom;
+            encoding = EnsureNoBom(encoding ?? Utf8NoBom);
             newLine ??= Environment.NewLine;
 
-            string content = string.Join(newLine, lines);
+            var lineList = lines.ToList();
+            if (lineList.Count > 0 && !string.IsNullOrEmpty(lineList[0]))
+            {
+                lineList[0] = StripLeadingBom(lineList[0]);
+            }
+
+            string content = string.Join(newLine, lineList);
             if (!string.IsNullOrEmpty(content))
             {
                 content += newLine;
@@ -358,6 +477,10 @@ namespace XamppUpdate.Services
 
             string tempFile = Path.Combine(dir, $"{Path.GetFileName(filePath)}.{Guid.NewGuid():N}.tmp");
             await File.WriteAllTextAsync(tempFile, content, encoding, cancellationToken);
+
+            // Double check: ensure no BOM byte sequence (0xEF, 0xBB, 0xBF) exists
+            await StripBomFromFileAsync(tempFile, cancellationToken);
+
             File.Move(tempFile, filePath, overwrite: true);
         }
     }

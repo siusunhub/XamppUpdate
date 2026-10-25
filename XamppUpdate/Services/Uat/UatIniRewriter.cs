@@ -34,10 +34,7 @@ public static class UatIniRewriter
     }
 
     private static string StripBom(string content) =>
-        content.Length > 0 && content[0] == '\uFEFF' ? content[1..] : content;
-
-    private static string BomOf(string content) =>
-        content.Length > 0 && content[0] == '\uFEFF' ? "\uFEFF" : string.Empty;
+        content.Length > 0 && content[0] == '\uFEFF' ? content.TrimStart('\uFEFF') : content;
 
     private static string[] SplitLines(string content) =>
         StripBom(content).Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
@@ -50,8 +47,9 @@ public static class UatIniRewriter
 
     public static string RewriteRoot(string content, string oldRoot, string newRoot)
     {
+        string stripped = StripBom(content);
         string back = newRoot.Trim().TrimEnd('\\', '/').Replace('/', '\\');
-        return RootRegex(oldRoot).Replace(content, m =>
+        return RootRegex(oldRoot).Replace(stripped, m =>
         {
             if (m.Value.Contains(@"\\")) return back.Replace(@"\", @"\\");
             if (m.Value.Contains('/') && !m.Value.Contains('\\')) return back.Replace('\\', '/');
@@ -103,7 +101,6 @@ public static class UatIniRewriter
 
     public static string SetOption(string content, string section, string key, string value)
     {
-        string bom = BomOf(content);
         string nl = content.Contains("\r\n") ? "\r\n" : "\n";
         var lines = SplitLines(content).ToList();
         var blocks = FindSections(lines, section);
@@ -116,7 +113,7 @@ public static class UatIniRewriter
             lines.Add($"[{section}]");
             lines.Add(newLine);
             lines.Add(string.Empty);
-            return bom + string.Join(nl, lines);
+            return string.Join(nl, lines);
         }
 
         bool replaced = false;
@@ -138,7 +135,7 @@ public static class UatIniRewriter
             while (insertAt > start + 1 && lines[insertAt - 1].Trim().Length == 0) insertAt--;
             lines.Insert(insertAt, newLine);
         }
-        return bom + string.Join(nl, lines);
+        return string.Join(nl, lines);
     }
 
     public static string? GetOption(string content, string section, string key)
@@ -159,11 +156,10 @@ public static class UatIniRewriter
 
     public static string CommentOutOptions(string content, string section, params string[] keys)
     {
-        string bom = BomOf(content);
         string nl = content.Contains("\r\n") ? "\r\n" : "\n";
         var lines = SplitLines(content).ToList();
         var blocks = FindSections(lines, section);
-        if (blocks.Count == 0) return content;
+        if (blocks.Count == 0) return StripBom(content);
 
         foreach (var (start, end) in blocks)
         {
@@ -175,7 +171,7 @@ public static class UatIniRewriter
                 }
             }
         }
-        return bom + string.Join(nl, lines);
+        return string.Join(nl, lines);
     }
 
     public static bool ContainsInclude(string content) =>

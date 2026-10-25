@@ -155,9 +155,14 @@
             <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="12,8">
                 <WrapPanel VerticalAlignment="Center">
                     <CheckBox x:Name="ChkDifferencesOnly" Content="Differences only"
-                              VerticalAlignment="Center" Margin="0,0,20,0"
+                              VerticalAlignment="Center" Margin="0,0,10,0"
                               Checked="DifferencesOnly_Changed" Unchecked="DifferencesOnly_Changed"
                               ToolTip="Hide unchanged lines while keeping original line numbers" />
+                    <CheckBox x:Name="ChkHideChanged" Content="Hide changed"
+                              VerticalAlignment="Center" Margin="0,0,20,0"
+                              Checked="HideChanged_Changed" Unchecked="HideChanged_Changed"
+                              IsEnabled="{Binding IsChecked, ElementName=ChkDifferencesOnly}"
+                              ToolTip="Hide lines that have already been changed or resolved in differences only mode" />
                     <Button x:Name="BtnPreviousDifference" Content="↑ Previous difference"
                             Click="BtnPreviousDifference_Click" IsEnabled="False"
                             Style="{StaticResource MiniActionButtonStyle}" Margin="0,0,6,0"
@@ -289,8 +294,26 @@
                                                HorizontalAlignment="Right"
                                                VerticalAlignment="Center" />
                                 </Border>
-                                <!-- Local Action Buttons (Line-by-Line Remove & Batch Block Remove) -->
+                                <!-- Local Action Buttons (Line-by-Line Remove, Batch Block Remove & Changed/Undo Controls) -->
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,1,2,1">
+                                    <!-- Changed Badge -->
+                                    <Border Background="#FEF3C7" BorderBrush="#FDE68A" BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="0,0,3,0"
+                                            Visibility="{Binding IsChanged, Converter={StaticResource BoolToVisConverter}}"
+                                            ToolTip="This line was changed in the local working configuration">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="✏️ " FontSize="10" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding ChangedBadgeText}" FontSize="10.5" FontWeight="SemiBold" Foreground="#B45309" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Line Undo Button -->
+                                    <Button Content="↶ Undo"
+                                            Click="BtnUndoLine_Click"
+                                            ToolTip="Undo change for this line and revert to original local state"
+                                            Style="{StaticResource MiniActionButtonStyle}"
+                                            Margin="0,0,3,0"
+                                            Visibility="{Binding CanUndoLine, Converter={StaticResource BoolToVisConverter}}" />
+
                                     <Button Content="🗑 Remove"
                                             Click="BtnRemoveLine_Click"
                                             ToolTip="Remove this deleted line from the local merged config (accept the incoming deletion)"

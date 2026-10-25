@@ -25,7 +25,26 @@ namespace XamppUpdate.Views.Controls
         private TextBox? _lineEditor;
         private DiffRowModel? _editingRow;
         private readonly Stack<InsertUndoState> _insertUndo = new();
-        private sealed record InsertUndoState(string Content, ConfigFileResolution Resolution, bool IsCustomMerged, DiffRowModel Position);
+        private sealed record RowSnapshot(
+            DiffRowModel Row,
+            string LocalText,
+            DiffLineType LocalType,
+            DiffLineType IncomingType,
+            int? LocalLineNumber,
+            bool IsChanged,
+            RowChangeType ChangeAction,
+            string ChangedBadgeText,
+            bool CanUndoLine,
+            bool CanInsert,
+            bool CanRemove
+        );
+
+        private sealed record InsertUndoState(
+            List<RowSnapshot> ChangedRows,
+            ConfigFileResolution Resolution,
+            bool IsCustomMerged,
+            DiffRowModel Position
+        );
 
         public static readonly DependencyProperty DiffItemProperty =
             DependencyProperty.Register(nameof(DiffItem), typeof(ConfigDiffItem), typeof(SideBySideDiffViewer),
@@ -136,12 +155,37 @@ namespace XamppUpdate.Views.Controls
         private void ApplyDifferenceFilter()
         {
             if (_rowsView == null) return;
-            _rowsView.Filter = ChkDifferencesOnly.IsChecked == true
-                ? item => item is DiffRowModel row && IsDifferent(row)
-                : null;
+            if (ChkDifferencesOnly.IsChecked == true)
+            {
+                bool hideChanged = ChkHideChanged?.IsChecked == true;
+                _rowsView.Filter = item =>
+                {
+                    if (item is not DiffRowModel row) return false;
+                    if (row.IsChanged)
+                    {
+                        return !hideChanged;
+                    }
+                    return IsDifferent(row);
+                };
+            }
+            else
+            {
+                _rowsView.Filter = null;
+            }
         }
 
         private void DifferencesOnly_Changed(object sender, RoutedEventArgs e)
+        {
+            var selectedRow = DiffList?.SelectedItem as DiffRowModel;
+            ApplyDifferenceFilter();
+            if (selectedRow != null && _rowsView?.Contains(selectedRow) == true)
+            {
+                DiffList!.SelectedItem = selectedRow;
+                DiffList.ScrollIntoView(selectedRow);
+            }
+        }
+
+        private void HideChanged_Changed(object sender, RoutedEventArgs e)
         {
             var selectedRow = DiffList?.SelectedItem as DiffRowModel;
             ApplyDifferenceFilter();
@@ -424,67 +468,186 @@ namespace XamppUpdate.Views.Controls
             ShowNotice("✓ Saved local line edit");
         }
 
+        private void BtnUndoLine_Click(object sender, RoutedEventArgs e)
+        {
+            if (DiffItem == null) return;
+            if (sender is not Button btn || btn.DataContext is not DiffRowModel row) return;
+
+            CancelLineEdit();
+            SetNavigationPosition(row);
+            RevertRowChange(row);
+            ShowNotice("✓ Undid line change");
+        }
+
+        private static void ApplyInsertToRow(DiffRowModel row)
+        {
+            row.Local.Text = row.Incoming.Text;
+            if (row.Local.Type == DiffLineType.EmptyPlaceholder)
+            {
+                row.Local.Type = DiffLineType.Inserted;
+                row.ChangeAction = RowChangeType.Inserted;
+            }
+            else
+            {
+                row.Local.Type = DiffLineType.Modified;
+                row.ChangeAction = RowChangeType.Modified;
+            }
+
+            row.IsChanged = true;
+            row.ChangedBadgeText = "Changed";
+            row.CanUndoLine = true;
+            row.Incoming.CanInsert = false;
+            row.Incoming.CanInsertBlock = false;
+            row.Local.CanRemove = false;
+            row.Local.CanRemoveBlock = false;
+        }
+
+        private static void ApplyRemoveToRow(DiffRowModel row)
+        {
+            row.IsChanged = true;
+            row.ChangeAction = RowChangeType.Removed;
+            row.ChangedBadgeText = "Removed";
+            row.CanUndoLine = true;
+            row.Local.CanRemove = false;
+            row.Local.CanRemoveBlock = false;
+            row.Incoming.CanInsert = false;
+            row.Incoming.CanInsertBlock = false;
+        }
+
+        private void RevertRowChange(DiffRowModel row)
+        {
+            row.Local.Text = row.OriginalLocalText;
+            row.Local.Type = row.OriginalLocalType;
+            row.Incoming.Type = row.OriginalIncomingType;
+            row.Local.LineNumber = row.OriginalLocalLineNumber;
+            row.IsChanged = false;
+            row.ChangeAction = RowChangeType.None;
+            row.ChangedBadgeText = string.Empty;
+            row.CanUndoLine = false;
+            row.Incoming.CanInsert = (row.OriginalIncomingType == DiffLineType.Inserted || row.OriginalIncomingType == DiffLineType.Modified);
+            row.Local.CanRemove = (row.OriginalLocalType == DiffLineType.Deleted);
+
+            if (DiffItem?.DiffRows != null)
+            {
+                ConfigDiffService.AnnotateDifferenceBlocks(DiffItem.DiffRows);
+            }
+
+            UpdateMergedContentFromRows();
+            _rowsView?.Refresh();
+            UpdateDifferenceNavigation();
+        }
+
+        private void UpdateMergedContentFromRows()
+        {
+            if (DiffItem?.DiffRows == null) return;
+
+            int currentLineNumber = 1;
+            var mergedLines = new List<string>();
+
+            foreach (var row in DiffItem.DiffRows)
+            {
+                bool includeInMerged;
+                if (row.IsChanged)
+                {
+                    includeInMerged = (row.ChangeAction != RowChangeType.Removed);
+                }
+                else
+                {
+                    includeInMerged = (row.Local.Type != DiffLineType.EmptyPlaceholder);
+                }
+
+                if (includeInMerged)
+                {
+                    row.Local.LineNumber = currentLineNumber++;
+                    mergedLines.Add(row.Local.Text);
+                }
+                else
+                {
+                    row.Local.LineNumber = null;
+                }
+            }
+
+            string lineEnding = DetectLineEnding(DiffItem.OriginalLocalContent ?? DiffItem.MergedContent);
+            DiffItem.MergedContent = string.Join(lineEnding, mergedLines);
+
+            bool anyChanged = DiffItem.DiffRows.Any(r => r.IsChanged);
+            if (anyChanged)
+            {
+                DiffItem.Resolution = ConfigFileResolution.UseMerged;
+                DiffItem.IsCustomMerged = true;
+            }
+            else
+            {
+                DiffItem.Resolution = ConfigFileResolution.KeepCurrent;
+                DiffItem.IsCustomMerged = false;
+            }
+
+            int unresolvedAdditions = DiffItem.DiffRows.Count(r => r.Incoming.CanInsert && r.Incoming.Type == DiffLineType.Inserted);
+            int unresolvedDeletions = DiffItem.DiffRows.Count(r => r.Local.CanRemove && r.Local.Type == DiffLineType.Deleted);
+            int unresolvedModifications = DiffItem.DiffRows.Count(r => r.Incoming.CanInsert && r.Incoming.Type == DiffLineType.Modified);
+
+            DiffItem.AdditionsCount = unresolvedAdditions;
+            DiffItem.DeletionsCount = unresolvedDeletions;
+            DiffItem.ModificationsCount = unresolvedModifications;
+
+            TxtDirectEditor.Text = DiffItem.MergedContent;
+        }
+
+        private static RowSnapshot CreateRowSnapshot(DiffRowModel row)
+        {
+            return new RowSnapshot(
+                Row: row,
+                LocalText: row.Local.Text,
+                LocalType: row.Local.Type,
+                IncomingType: row.Incoming.Type,
+                LocalLineNumber: row.Local.LineNumber,
+                IsChanged: row.IsChanged,
+                ChangeAction: row.ChangeAction,
+                ChangedBadgeText: row.ChangedBadgeText,
+                CanUndoLine: row.CanUndoLine,
+                CanInsert: row.Incoming.CanInsert,
+                CanRemove: row.Local.CanRemove
+            );
+        }
+
+        private static void RestoreRowSnapshot(RowSnapshot snapshot)
+        {
+            var row = snapshot.Row;
+            row.Local.Text = snapshot.LocalText;
+            row.Local.Type = snapshot.LocalType;
+            row.Incoming.Type = snapshot.IncomingType;
+            row.Local.LineNumber = snapshot.LocalLineNumber;
+            row.IsChanged = snapshot.IsChanged;
+            row.ChangeAction = snapshot.ChangeAction;
+            row.ChangedBadgeText = snapshot.ChangedBadgeText;
+            row.CanUndoLine = snapshot.CanUndoLine;
+            row.Incoming.CanInsert = snapshot.CanInsert;
+            row.Local.CanRemove = snapshot.CanRemove;
+        }
+
         private void BtnInsertLine_Click(object sender, RoutedEventArgs e)
         {
             if (DiffItem == null) return;
             if (sender is not Button btn || btn.DataContext is not DiffRowModel row) return;
             if (!row.Incoming.CanInsert) return;
 
+            CancelLineEdit();
             SetNavigationPosition(row);
-            _insertUndo.Push(new InsertUndoState(DiffItem.MergedContent, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
+
+            var snapshot = CreateRowSnapshot(row);
+            _insertUndo.Push(new InsertUndoState(new List<RowSnapshot> { snapshot }, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
             BtnUndoInsert.IsEnabled = true;
 
-            var incomingLine = row.Incoming;
-            int index = row.Index;
+            ApplyInsertToRow(row);
 
-            var localLines = new List<string>(NormalizeLines(DiffItem.MergedContent));
-
-            // Check if there is a corresponding local line
-            DiffLineModel localCorresponding = row.Local;
-
-            if (localCorresponding.LineNumber.HasValue && localCorresponding.LineNumber.Value > 0)
+            if (DiffItem.DiffRows != null)
             {
-                int targetLineIndex = localCorresponding.LineNumber.Value - 1;
-                if (targetLineIndex >= 0 && targetLineIndex < localLines.Count)
-                {
-                    // Replace existing line
-                    localLines[targetLineIndex] = incomingLine.Text;
-                }
-                else
-                {
-                    localLines.Add(incomingLine.Text);
-                }
-            }
-            else
-            {
-                // Find nearest previous line in DiffRows that has a local line number
-                int insertPos = 0;
-                for (int i = index - 1; i >= 0; i--)
-                {
-                    if (i < DiffItem.DiffRows.Count && DiffItem.DiffRows[i].Local.LineNumber.HasValue)
-                    {
-                        insertPos = DiffItem.DiffRows[i].Local.LineNumber!.Value;
-                        break;
-                    }
-                }
-
-                if (insertPos >= 0 && insertPos <= localLines.Count)
-                {
-                    localLines.Insert(insertPos, incomingLine.Text);
-                }
-                else
-                {
-                    localLines.Add(incomingLine.Text);
-                }
+                ConfigDiffService.AnnotateDifferenceBlocks(DiffItem.DiffRows);
             }
 
-            string lineEnding = DetectLineEnding(DiffItem.MergedContent);
-            DiffItem.MergedContent = string.Join(lineEnding, localLines);
-            DiffItem.Resolution = ConfigFileResolution.UseMerged;
-            DiffItem.IsCustomMerged = true;
-
-            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
-            TxtDirectEditor.Text = DiffItem.MergedContent;
+            UpdateMergedContentFromRows();
+            _rowsView?.Refresh();
+            UpdateDifferenceNavigation();
 
             ShowNotice("✓ Inserted incoming line into merged config");
         }
@@ -493,25 +656,25 @@ namespace XamppUpdate.Views.Controls
         {
             if (DiffItem == null) return;
             if (sender is not Button btn || btn.DataContext is not DiffRowModel row) return;
-            if (!row.Local.CanRemove || row.Local.LineNumber is not int lineNumber) return;
+            if (!row.Local.CanRemove) return;
 
-            var localLines = new List<string>(NormalizeLines(DiffItem.MergedContent));
-            int targetLineIndex = lineNumber - 1;
-            if (targetLineIndex < 0 || targetLineIndex >= localLines.Count) return;
-
+            CancelLineEdit();
             SetNavigationPosition(row);
-            _insertUndo.Push(new InsertUndoState(DiffItem.MergedContent, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
+
+            var snapshot = CreateRowSnapshot(row);
+            _insertUndo.Push(new InsertUndoState(new List<RowSnapshot> { snapshot }, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
             BtnUndoInsert.IsEnabled = true;
 
-            localLines.RemoveAt(targetLineIndex);
+            ApplyRemoveToRow(row);
 
-            string lineEnding = DetectLineEnding(DiffItem.MergedContent);
-            DiffItem.MergedContent = string.Join(lineEnding, localLines);
-            DiffItem.Resolution = ConfigFileResolution.UseMerged;
-            DiffItem.IsCustomMerged = true;
+            if (DiffItem.DiffRows != null)
+            {
+                ConfigDiffService.AnnotateDifferenceBlocks(DiffItem.DiffRows);
+            }
 
-            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
-            TxtDirectEditor.Text = DiffItem.MergedContent;
+            UpdateMergedContentFromRows();
+            _rowsView?.Refresh();
+            UpdateDifferenceNavigation();
 
             ShowNotice("✓ Removed deleted line from merged config");
         }
@@ -555,140 +718,62 @@ namespace XamppUpdate.Views.Controls
 
         private void ExecuteInsertBlock(DiffRowModel row)
         {
-            if (DiffItem == null) return;
+            if (DiffItem?.DiffRows == null || DiffItem.DiffRows.Count == 0) return;
             CancelLineEdit();
-            var rows = DiffItem.DiffRows;
-            if (rows == null || rows.Count == 0) return;
 
             var (startIndex, endIndex) = GetBlockRange(row);
             if (startIndex < 0 || endIndex < 0) return;
 
-            var blockRows = rows.Skip(startIndex).Take(endIndex - startIndex + 1).ToList();
-            var incomingLinesToInsert = blockRows
-                .Where(r => r.Incoming.CanInsert)
-                .Select(r => r.Incoming.Text)
-                .ToList();
-
-            if (incomingLinesToInsert.Count == 0) return;
+            var blockRows = DiffItem.DiffRows.Skip(startIndex).Take(endIndex - startIndex + 1).ToList();
+            var rowsToInsert = blockRows.Where(r => r.Incoming.CanInsert).ToList();
+            if (rowsToInsert.Count == 0) return;
 
             SetNavigationPosition(row);
-            _insertUndo.Push(new InsertUndoState(DiffItem.MergedContent, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
+            var snapshots = rowsToInsert.Select(CreateRowSnapshot).ToList();
+            _insertUndo.Push(new InsertUndoState(snapshots, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
             BtnUndoInsert.IsEnabled = true;
 
-            var localLines = new List<string>(NormalizeLines(DiffItem.MergedContent));
-
-            // Find all local lines in this block (lines that exist in working/merged local file)
-            var localBlockLines = blockRows
-                .Where(r => r.Local.LineNumber.HasValue && r.Local.Type != DiffLineType.EmptyPlaceholder)
-                .Select(r => r.Local.LineNumber!.Value)
-                .Distinct()
-                .OrderByDescending(n => n)
-                .ToList();
-
-            if (localBlockLines.Count > 0)
+            foreach (var r in rowsToInsert)
             {
-                int minLine = localBlockLines.Min();
-                int targetIndex = minLine - 1;
-
-                // Remove existing local lines in this block in descending order
-                foreach (int lineNum in localBlockLines)
-                {
-                    int idx = lineNum - 1;
-                    if (idx >= 0 && idx < localLines.Count)
-                    {
-                        localLines.RemoveAt(idx);
-                    }
-                }
-
-                // Insert incoming lines at the start position of this block
-                if (targetIndex >= 0 && targetIndex <= localLines.Count)
-                {
-                    localLines.InsertRange(targetIndex, incomingLinesToInsert);
-                }
-                else
-                {
-                    localLines.AddRange(incomingLinesToInsert);
-                }
-            }
-            else
-            {
-                // No local lines in this block (pure insertion).
-                // Find nearest previous line in DiffRows before startIndex that has a local line number
-                int insertPos = 0;
-                for (int i = startIndex - 1; i >= 0; i--)
-                {
-                    if (i < rows.Count && rows[i].Local.LineNumber.HasValue)
-                    {
-                        insertPos = rows[i].Local.LineNumber!.Value;
-                        break;
-                    }
-                }
-
-                if (insertPos >= 0 && insertPos <= localLines.Count)
-                {
-                    localLines.InsertRange(insertPos, incomingLinesToInsert);
-                }
-                else
-                {
-                    localLines.AddRange(incomingLinesToInsert);
-                }
+                ApplyInsertToRow(r);
             }
 
-            string lineEnding = DetectLineEnding(DiffItem.MergedContent);
-            DiffItem.MergedContent = string.Join(lineEnding, localLines);
-            DiffItem.Resolution = ConfigFileResolution.UseMerged;
-            DiffItem.IsCustomMerged = true;
+            ConfigDiffService.AnnotateDifferenceBlocks(DiffItem.DiffRows);
+            UpdateMergedContentFromRows();
+            _rowsView?.Refresh();
+            UpdateDifferenceNavigation();
 
-            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
-            TxtDirectEditor.Text = DiffItem.MergedContent;
-
-            ShowNotice($"✓ Inserted incoming block ({incomingLinesToInsert.Count} line{(incomingLinesToInsert.Count == 1 ? "" : "s")}) into merged config");
+            ShowNotice($"✓ Inserted incoming block ({rowsToInsert.Count} line{(rowsToInsert.Count == 1 ? "" : "s")}) into merged config");
         }
 
         private void ExecuteRemoveBlock(DiffRowModel row)
         {
-            if (DiffItem == null) return;
+            if (DiffItem?.DiffRows == null || DiffItem.DiffRows.Count == 0) return;
             CancelLineEdit();
-            var rows = DiffItem.DiffRows;
-            if (rows == null || rows.Count == 0) return;
 
             var (startIndex, endIndex) = GetBlockRange(row);
             if (startIndex < 0 || endIndex < 0) return;
 
-            var blockRows = rows.Skip(startIndex).Take(endIndex - startIndex + 1).ToList();
-            var localLinesToRemove = blockRows
-                .Where(r => r.Local.CanRemove && r.Local.LineNumber.HasValue)
-                .Select(r => r.Local.LineNumber!.Value)
-                .Distinct()
-                .OrderByDescending(n => n)
-                .ToList();
-
-            if (localLinesToRemove.Count == 0) return;
+            var blockRows = DiffItem.DiffRows.Skip(startIndex).Take(endIndex - startIndex + 1).ToList();
+            var rowsToRemove = blockRows.Where(r => r.Local.CanRemove).ToList();
+            if (rowsToRemove.Count == 0) return;
 
             SetNavigationPosition(row);
-            _insertUndo.Push(new InsertUndoState(DiffItem.MergedContent, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
+            var snapshots = rowsToRemove.Select(CreateRowSnapshot).ToList();
+            _insertUndo.Push(new InsertUndoState(snapshots, DiffItem.Resolution, DiffItem.IsCustomMerged, row));
             BtnUndoInsert.IsEnabled = true;
 
-            var localLines = new List<string>(NormalizeLines(DiffItem.MergedContent));
-
-            foreach (int lineNum in localLinesToRemove)
+            foreach (var r in rowsToRemove)
             {
-                int targetIndex = lineNum - 1;
-                if (targetIndex >= 0 && targetIndex < localLines.Count)
-                {
-                    localLines.RemoveAt(targetIndex);
-                }
+                ApplyRemoveToRow(r);
             }
 
-            string lineEnding = DetectLineEnding(DiffItem.MergedContent);
-            DiffItem.MergedContent = string.Join(lineEnding, localLines);
-            DiffItem.Resolution = ConfigFileResolution.UseMerged;
-            DiffItem.IsCustomMerged = true;
+            ConfigDiffService.AnnotateDifferenceBlocks(DiffItem.DiffRows);
+            UpdateMergedContentFromRows();
+            _rowsView?.Refresh();
+            UpdateDifferenceNavigation();
 
-            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
-            TxtDirectEditor.Text = DiffItem.MergedContent;
-
-            ShowNotice($"✓ Removed deleted block ({localLinesToRemove.Count} line{(localLinesToRemove.Count == 1 ? "" : "s")}) from merged config");
+            ShowNotice($"✓ Removed deleted block ({rowsToRemove.Count} line{(rowsToRemove.Count == 1 ? "" : "s")}) from merged config");
         }
 
         private void BtnApplyDirectEdit_Click(object sender, RoutedEventArgs e)
@@ -741,14 +826,26 @@ namespace XamppUpdate.Views.Controls
         private void BtnUndoInsert_Click(object sender, RoutedEventArgs e)
         {
             if (DiffItem == null || !_insertUndo.TryPop(out var state)) return;
+
+            CancelLineEdit();
             _positionRow = state.Position;
-            DiffItem.MergedContent = state.Content;
-            DiffItem.Resolution = state.Resolution;
-            DiffItem.IsCustomMerged = state.IsCustomMerged;
-            _diffService.RebuildDiff(DiffItem, DiffItem.MergedContent, DiffItem.IncomingContent);
-            TxtDirectEditor.Text = DiffItem.MergedContent;
+
+            foreach (var snapshot in state.ChangedRows)
+            {
+                RestoreRowSnapshot(snapshot);
+            }
+
+            if (DiffItem.DiffRows != null)
+            {
+                ConfigDiffService.AnnotateDifferenceBlocks(DiffItem.DiffRows);
+            }
+
+            UpdateMergedContentFromRows();
+            _rowsView?.Refresh();
+            UpdateDifferenceNavigation();
+
             BtnUndoInsert.IsEnabled = _insertUndo.Count > 0;
-            ShowNotice("✓ Undid last line change");
+            ShowNotice("✓ Undid last action");
         }
 
         private void BtnCopyEditorText_Click(object sender, RoutedEventArgs e)

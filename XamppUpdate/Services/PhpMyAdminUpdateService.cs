@@ -539,6 +539,10 @@ namespace XamppUpdate.Services
                 }
 
                 file.CopyTo(targetPath, true);
+                if (FileEncodingHelper.IsConfigFile(targetPath))
+                {
+                    FileEncodingHelper.StripBomFromFile(targetPath);
+                }
                 current++;
 
                 if (current % 50 == 0 || current == total)

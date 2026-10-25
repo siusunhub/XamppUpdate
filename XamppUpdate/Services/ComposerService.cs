@@ -107,18 +107,7 @@ namespace XamppUpdate.Services
 
         public static async Task StripBomIfPresentAsync(string filePath, CancellationToken cancellationToken = default)
         {
-            if (!File.Exists(filePath)) return;
-            try
-            {
-                byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
-                if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-                {
-                    byte[] stripped = new byte[bytes.Length - 3];
-                    Buffer.BlockCopy(bytes, 3, stripped, 0, stripped.Length);
-                    await File.WriteAllBytesAsync(filePath, stripped, cancellationToken);
-                }
-            }
-            catch { }
+            await FileEncodingHelper.StripBomFromFileAsync(filePath, cancellationToken);
         }
 
         public async Task<bool> RunDeployToWwwAsync(

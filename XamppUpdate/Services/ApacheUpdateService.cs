@@ -738,6 +738,10 @@ namespace XamppUpdate.Services
                 try
                 {
                     File.Copy(sourceFile, destFile, true);
+                    if (FileEncodingHelper.IsConfigFile(destFile))
+                    {
+                        FileEncodingHelper.StripBomFromFile(destFile);
+                    }
                     return;
                 }
                 catch (IOException) when (i < retryCount - 1)

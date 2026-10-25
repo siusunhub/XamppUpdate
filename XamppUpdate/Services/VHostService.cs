@@ -572,24 +572,8 @@ namespace XamppUpdate.Services
                 }
             }
 
-            // Write atomically via temporary file
-            string dir = Path.GetDirectoryName(filePath) ?? AppDomain.CurrentDomain.BaseDirectory;
-            if (!Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
-            string tempFile = Path.Combine(dir, $"{Path.GetFileName(filePath)}.{Guid.NewGuid():N}.tmp");
-            await File.WriteAllTextAsync(tempFile, sb.ToString(), encoding);
-
-            if (File.Exists(filePath))
-            {
-                File.Move(tempFile, filePath, overwrite: true);
-            }
-            else
-            {
-                File.Move(tempFile, filePath);
-            }
+            // Write atomically via FileEncodingHelper (guarantees UTF-8 without BOM)
+            await FileEncodingHelper.WriteAllTextPreservingEncodingAsync(filePath, sb.ToString());
         }
 
         private static List<string> UpdateBlockInPlace(VHostEntry entry, bool omitFallbackCert = false)
@@ -1134,9 +1118,7 @@ namespace XamppUpdate.Services
                     mdEnabled = true;
                 }
 
-                string tempFile = $"{confPath}.{Guid.NewGuid():N}.tmp";
-                await FileEncodingHelper.WriteAllLinesAsync(tempFile, lines, confEncoding, confNewLine);
-                File.Move(tempFile, confPath, overwrite: true);
+                await FileEncodingHelper.WriteAllLinesAsync(confPath, lines, confEncoding, confNewLine);
 
                 return (true, $"Successfully enabled 'mod_md' and 'mod_watchdog' in '{confPath}'.");
             }
